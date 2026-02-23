@@ -24,6 +24,9 @@ student_t_var_cvar/
 └── README.md                      # Project documentation
 ```
 # Pipeline
+## `api.py`
+In progress - Pull data via CoinGecko API
+
 ## `returns.py`
 Responsible for data ingestion and outputs log returns.
 
