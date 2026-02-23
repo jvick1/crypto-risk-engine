@@ -6,6 +6,7 @@ Purpose: Compute Normal & Student-t distributions for VaR / CVaR modeling
 from typing import Tuple
 from scipy.stats import norm, t
 from pathlib import Path
+import argparse
 
 import numpy as np
 import pandas as pd
@@ -38,11 +39,27 @@ def fit_student_t(returns: pd.Series) -> Tuple[float, float, float]:
     return df, loc, scale
 
 if __name__ == "__main__":
-    try:
-        base_dir = Path(__file__).resolve().parents[1]
+    parser = argparse.ArgumentParser(description="Test fitting Normal & Student-t distributions")
+    parser.add_argument(
+        "--coin_symbol",
+        type=str,
+        default="btc",
+        help="Coin symbol to load returns for (e.g., btc, eth, sol)"
+    )
+    parser.add_argument(
+        "--vs_currency",
+        type=str,
+        default="usd",
+        help="Quote currency (default: usd)"
+    )
 
-        returns_csv = base_dir / "data" / "output" / "data.csv"
-        returns = pd.read_csv(returns_csv)["return"]
+    args = parser.parse_args()
+
+    base_dir = Path(__file__).resolve().parents[1]
+    returns_path = base_dir / "data" / "output" / f"{args.coin_symbol}-log-returns.csv"
+
+    try:
+        returns = pd.read_csv(returns_path)["return"]
         print(f"Loaded {len(returns)} returns (mean = {returns.mean():.6f}, std = {returns.std():.6f})") #:.2f trims output to #.##
 
         mu, sig = fit_normal(returns)

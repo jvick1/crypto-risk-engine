@@ -5,6 +5,7 @@ Purpose: VaR / CVaR modeling
 
 from scipy.stats import norm, t
 from pathlib import Path
+import argparse
 
 import pandas as pd
 
@@ -73,10 +74,26 @@ if __name__ == "__main__":
 
     from .distributions import fit_normal, fit_student_t
 
-    try:
-        base_dir = Path(__file__).resolve().parents[1]
-        returns_path = base_dir / "data" / "output" / "data.csv"
+    parser = argparse.ArgumentParser(description="Risk Metrics for Normal & Student-t distributions")
+    parser.add_argument(
+        "--coin_symbol",
+        type=str,
+        default="btc",
+        help="Coin symbol to load returns for (e.g., btc, eth, sol)"
+    )
+    parser.add_argument(
+        "--vs_currency",
+        type=str,
+        default="usd",
+        help="Quote currency (default: usd)"
+    )
 
+    args = parser.parse_args()
+
+    base_dir = Path(__file__).resolve().parents[1]
+    returns_path = base_dir / "data" / "output" / f"{args.coin_symbol}-log-returns.csv"
+
+    try:
         returns = pd.read_csv(returns_path)["return"]
 
         # Fit distributions

@@ -5,6 +5,7 @@ Purpose: Compute log returns for Student-t VaR / CVaR modeling
 
 from pathlib import Path
 
+import argparse
 import pandas as pd
 import numpy as np
 
@@ -74,9 +75,36 @@ def compute_log_returns(
     out.to_csv(output_path, index=False)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Compute log returns from raw crypto price data")
+    parser.add_argument(
+        "--coin_symbol",
+        type=str,
+        default="btc",
+        help="Coin symbol (e.g., 'btc', 'eth', 'sol') — matches api.py filename"
+    )
+    parser.add_argument(
+        "--vs_currency",
+        type=str,
+        default="usd",
+        help="Quote currency (default: usd)"
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        default=True,
+        help="Print summary statistics (default: True)"
+    )
+
+    args = parser.parse_args()
+
     base_dir = Path(__file__).resolve().parents[1]
 
-    input_csv = base_dir / "data" / "raw" / "btc-usd-max.csv"
-    output_csv = base_dir / "data" / "output" / "data.csv"
+    input_csv = base_dir / "data" / "raw" / f"{args.coin_symbol}-{args.vs_currency}-max.csv"
+    output_csv = base_dir / "data" / "output" / f"{args.coin_symbol}-log-returns.csv"
 
-    compute_log_returns(input_csv, output_csv)
+    if not input_csv.exists():
+        print(f"Error: Raw data file not found: {input_csv}")
+        print("Run api.py first: python api.py --coin_symbol", args.coin_symbol)
+        exit(1)
+
+    compute_log_returns(input_csv, output_csv, verbose=args.verbose)
