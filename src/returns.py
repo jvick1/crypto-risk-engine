@@ -26,7 +26,6 @@ def compute_log_returns(
 ):
     """
     Read raw price data, compute log returns, and save to output. 
-    Raw data is csv from https://www.coingecko.com/en/coins/bitcoin/historical_data
 
     Parameters ----------
     input_path: Path to raw CSV file
