@@ -2,7 +2,7 @@
 Author: Jake Vick
 Purpose: End-to-end execution of distribution fitting, visualization, and risk metrics
 
-Run w/ python -m src.main
+Run w/ python -m src.main --coin_symbol eth
 """
 
 from pathlib import Path
