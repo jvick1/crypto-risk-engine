@@ -45,4 +45,4 @@ Returns distributions with fitted Normal & Student-t overlay, QQ-plots against e
 Uses both normal and Student-t the distributions and calculates the Var & Cvar  
 
 ## `main.py`
-Orchestration Layer - runs dist, viz and cacls risk metrics for static btc file.
+Orchestration Layer - runs ets, dist, viz and cacls risk metrics for static file.
