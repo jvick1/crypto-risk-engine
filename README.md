@@ -13,27 +13,27 @@ student_t_var_cvar/
 │
 ├── data/
 │   ├── raw/
-│   │   └── {coin_symbol}-{vs_currency}-max.csv        # Raw $BTC returns
+│   │   └── {coin_symbol}-{vs_currency}-max.csv    # Raw $BTC returns
 │   │
 │   └── output/
-│       └── {coin_symbol}-log-returns.csv              # Log Returns 
+│       └── {coin_symbol}-log-returns.csv          # Log Returns 
 │
 ├── src/
-│   ├── api.py                     # Pulls crypto data via yf
-│   ├── returns.py                 # Takes /raw and /output log returns 
-│   ├── distributions.py           # Distribution fitting and risk metrics
-│   ├── visualization.py           # Plots (PDF, QQ, and density)
-│   ├── risk_metrics.py            # Calc for Var & Cvar
-│   └── main.py                    # Orchestration Layer
+│   ├── api.py                                     # Pulls crypto data via yf
+│   ├── returns.py                                 # Takes /raw and /output log returns 
+│   ├── distributions.py                           # Distribution fitting and risk metrics
+│   ├── visualization.py                           # Plots (PDF, QQ, and density)
+│   ├── risk_metrics.py                            # Calc for Var & Cvar
+│   └── main.py                                    # Orchestration Layer
 │
-└── README.md                      # Project documentation
+└── README.md                                      # Project documentation
 ```
 # Pipeline
 ## `api.py`
-Pull data with yf save to raw.
+Pull data with yf and saves raw file to `data/raw/{coin_symbol}-{vs_currency}-max.csv`.
 
 ## `returns.py`
-Responsible for data ingestion and outputs log returns.
+Responsible for data ingestion and calculating the log returns. Outputs to `data/output/{coin_symbol}-log-returns.csv`.
 
 ## `distributions.py`
 Fits normal and student-t distributions to log retuns. 
@@ -45,4 +45,4 @@ Returns distributions with fitted Normal & Student-t overlay, QQ-plots against e
 Uses both normal and Student-t the distributions and calculates the Var & Cvar  
 
 ## `main.py`
-Orchestration Layer - runs etl, dist, viz and cacls risk metrics for static file.
+Orchestration Layer - runs ETL (pull & log), distributions, visualization and cacls risk metrics for `{coin_symbol}`.
