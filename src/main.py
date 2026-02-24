@@ -30,7 +30,7 @@ def etl(coin_symbol: str, vs_currency: str, base_dir: Path):
     """Runs full ETL: Fetch -> save raw -> compute log returns -> save processed"""
     
     raw_path = base_dir / "data" / "raw" / f"{coin_symbol}-{vs_currency}-max.csv"
-    returns_path = base_dir / "data" / "output" / f"{coin_symbol}-log-returns.csv.csv"
+    returns_path = base_dir / "data" / "output" / f"{coin_symbol}-log-returns.csv"
 
     # API 
     print(f"Fetching raw data for {coin_symbol.upper()}-{vs_currency.upper()} from Yahoo Finance...")
