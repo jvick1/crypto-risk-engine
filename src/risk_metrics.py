@@ -5,6 +5,7 @@ Purpose: VaR / CVaR modeling
 
 from scipy.stats import norm, t
 from pathlib import Path
+import numpy as np
 import argparse
 
 import pandas as pd
@@ -66,6 +67,31 @@ def compute_cvar_student_t(df: float, loc: float, scale: float, alpha: float = 0
     adjustment = (df + t_q**2) / (df - 1)
     return loc - scale * (density / alpha) * adjustment
 
+def compute_var_historical(returns: pd.Series, alpha: float = 0.05) -> float:
+    """
+    Compute historical (empirical) VaR as the alpha-quantile of returns.
+
+    Parameters ----------
+    returns, alpha
+
+    Output -------
+    Historical VaR estimate
+    """
+    return np.percentile(returns, alpha * 100)
+
+def compute_cvar_historical(returns: pd.Series, alpha: float = 0.05) -> float:
+    """
+    Compute historical CVaR as the mean of returns below the VaR threshold.
+
+    Parameters ----------
+    returns, alpha
+
+    Output -------
+    Historical CVaR estimate
+    """
+    var = compute_var_historical(returns, alpha)
+    return returns[returns <= var].mean()
+
 if __name__ == "__main__":
     """
     Run with:
@@ -109,6 +135,9 @@ if __name__ == "__main__":
 
         print(f"Student-t VaR (95%):  {compute_var_student_t(df, loc, scale, alpha):.4f}")
         print(f"Student-t CVaR (95%): {compute_cvar_student_t(df, loc, scale, alpha):.4f}")
+
+        print(f"Historical VaR (95%):  {compute_var_historical(returns, alpha):.4f}")
+        print(f"Historical CVaR (95%): {compute_cvar_historical(returns, alpha):.4f}")
 
     except Exception as e:
         print(f"Risk metric test failed: {e}")

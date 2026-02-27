@@ -65,7 +65,7 @@ def compute_log_returns(
     out = df[["date", "return"]]
 
     # Reverse order: most recent first
-    out = out.sort_values("date", ascending=False)
+    #out = out.sort_values("date", ascending=False) #prep for ts analysis 
 
     # Ensure output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
