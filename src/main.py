@@ -17,7 +17,8 @@ from .distributions import fit_normal, fit_student_t
 from .visualization import (
     plot_histogram_with_fits,
     plot_qq_plots,
-    plot_tail_comparison
+    plot_tail_comparison,
+    plot_rolling_var
 )
 from .risk_metrics import (
     compute_var_normal,
@@ -94,10 +95,11 @@ def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd"
         print("\nBreach Rate Summary:")
         print(summary_df.to_string())
 
-        # Optionally save to CSV
-        backtest_path = base_dir / "data" / "output" / f"{coin_symbol}-backtest-results.csv"
+        backtest_path = base_dir / "data" / "backtest" / f"{coin_symbol}-backtest-results.csv"
         results_df.to_csv(backtest_path, index=False)
         print(f"Full backtest results saved to {backtest_path}")
+
+        plot_rolling_var(results_df)
 
     plt.show()
 

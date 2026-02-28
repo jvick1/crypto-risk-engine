@@ -89,6 +89,15 @@ def plot_tail_comparison(normal_params, t_params, tail_min=-0.30):
     ax.legend()
     return fig
 
+def plot_rolling_var(results_df: pd.DataFrame, methods: list = ["normal", "student_t", "historical"]):
+    fig, ax = plt.subplots(figsize=(12, 6))
+    for method in methods:
+        ax.plot(results_df["date"], results_df[f"{method}_var"], label=f"{method.capitalize()} VaR")
+    ax.scatter(results_df[results_df["normal_breach"]]["date"], results_df[results_df["normal_breach"]]["actual_return"],
+               color="red", marker="x", label="Breaches (example for Normal)")
+    ax.set_title("Rolling VaR Estimates and Breaches")
+    ax.legend()
+    return fig
 
 if __name__ == "__main__":
     """
