@@ -58,3 +58,26 @@ Using 3x methods (historical, normal, student-t) backtest VaR w/ rolling window
 
 ## `main.py`
 Orchestration Layer - runs ETL (pull & log), distributions, backtesting (if selected), visualization, and cacls risk metrics for `{coin_symbol}`.
+
+# Plots
+
+## Probability Density Functions
+This chart shows empirical distribution of log returns as a histogram overlaid with Normal and Student-t probability density functions (PDFs). This is useful in VaR & CVaR analysis for visually assessing how well the models capture the fat tails and skewness of the data.
+
+<img width="500" alt="Prob Density Func" src="https://github.com/user-attachments/assets/734b9654-e22a-4aeb-9c14-d419c1d9c80b" />
+
+## Quantile-Quantile Plot
+QQ plots compares the quantiles of the log returns against Normal & Student-t distributions. Highlights how Student-t better accommodates heavy tailed behavior in digital assets.
+
+<img height="300" alt="QQ plot" src="https://github.com/user-attachments/assets/f33fa17b-ff46-428b-abb2-ee6e135ad2b8" />
+
+## Left-tail Density
+This plot compares the left-tail densities of fitted Normal and Student-t distributions for returns. Typically, Student-t tails decay slower helping to accuratly predict extreme downside risk.
+
+<img height="300" alt="Image" src="https://github.com/user-attachments/assets/3d9a0a70-c576-44c8-9a17-3632725620f4" />
+
+## Backtest
+This backtest chart shows the rolling 5% VaR est for returns using Normal, Student-t, and Historical methods overlaid on actual returns. This helps compare model preformance over time, spot periods of risk, and validate models against historical crashes. 
+
+<img height="400" alt="Image" src="https://github.com/user-attachments/assets/35557aad-8fc7-410e-8c03-490eb3535509" />
+
