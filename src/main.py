@@ -25,6 +25,7 @@ from .risk_metrics import (
     compute_var_student_t,
     compute_cvar_student_t
 )
+from .backtest import rolling_backtest
 
 def etl(coin_symbol: str, vs_currency: str, base_dir: Path):
     """Runs full ETL: Fetch -> save raw -> compute log returns -> save processed"""
@@ -51,7 +52,7 @@ def etl(coin_symbol: str, vs_currency: str, base_dir: Path):
 
     return returns_path
 
-def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd"):
+def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd", backtest: bool = False, window_size: int = 252):
     base_dir = Path(__file__).resolve().parents[1]
 
     returns_path = etl(coin_symbol, vs_currency, base_dir)
@@ -82,8 +83,23 @@ def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd"
     print(f"Student-t VaR:  {compute_var_student_t(df, loc, scale, alpha):.4f}")
     print(f"Student-t CVaR: {compute_cvar_student_t(df, loc, scale, alpha):.4f}")
 
-    plt.show()
+    if backtest:
+        print(f"\nRunning rolling backtest with window={window_size}...")
+        df_returns["date"] = pd.to_datetime(df_returns["date"])  # Ensure datetime
+        results_df, summary_df = rolling_backtest(df_returns, window_size, alpha)
 
+        print("\nBacktest Results (first 5 rows):")
+        print(results_df.head().to_string(index=False))
+
+        print("\nBreach Rate Summary:")
+        print(summary_df.to_string())
+
+        # Optionally save to CSV
+        backtest_path = base_dir / "data" / "output" / f"{coin_symbol}-backtest-results.csv"
+        results_df.to_csv(backtest_path, index=False)
+        print(f"Full backtest results saved to {backtest_path}")
+
+    plt.show()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Crypto risk analysis: fit distributions & compute VaR/CVaR")
@@ -105,7 +121,19 @@ if __name__ == "__main__":
         default=0.05,
         help="Confidence level for VaR/CVaR (default: 0.05 = 95%)"
     )
+    parser.add_argument(
+        "--backtest", 
+        action="store_true", 
+        default=False, 
+        help="Run out-of-sample backtest"
+    )
+    parser.add_argument(
+        "--window_size", 
+        type=int, 
+        default=252, 
+        help="Rolling window size (days)"
+    )
 
     args = parser.parse_args()
 
-    main(alpha=args.alpha, coin_symbol=args.coin_symbol, vs_currency=args.vs_currency)
+    main(alpha=args.alpha, coin_symbol=args.coin_symbol, vs_currency=args.vs_currency, backtest=args.backtest, window_size=args.window_size)
