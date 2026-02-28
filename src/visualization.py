@@ -89,14 +89,68 @@ def plot_tail_comparison(normal_params, t_params, tail_min=-0.30):
     ax.legend()
     return fig
 
-def plot_rolling_var(results_df: pd.DataFrame, methods: list = ["normal", "student_t", "historical"]):
-    fig, ax = plt.subplots(figsize=(12, 6))
+def plot_rolling_var(results_df: pd.DataFrame,
+                     summary_df: pd.DataFrame,
+                     methods: list = ["normal", "student_t", "historical"],
+                     alpha: float = 0.05,
+                     coin_symbol: str = None):
+
+    fig, ax = plt.subplots(figsize=(14, 7))
+
+    # Plot actual returns
+    ax.plot(results_df["date"],
+            results_df["actual_return"],
+            color="black",
+            alpha=0.5,
+            linewidth=1,
+            label="Actual Return")
+
+    # Color map for consistency
+    colors = {
+        "normal": "#1f77b4",
+        "student_t": "#ff7f0e",
+        "historical": "#2ca02c"
+    }
+
+    # Plot VaR lines + breaches
     for method in methods:
-        ax.plot(results_df["date"], results_df[f"{method}_var"], label=f"{method.capitalize()} VaR")
-    ax.scatter(results_df[results_df["normal_breach"]]["date"], results_df[results_df["normal_breach"]]["actual_return"],
-               color="red", marker="x", label="Breaches (example for Normal)")
-    ax.set_title("Rolling VaR Estimates and Breaches")
-    ax.legend()
+        breach_rate = summary_df.loc[method, "breach_rate"]
+
+        # VaR line
+        ax.plot(results_df["date"],
+                results_df[f"{method}_var"],
+                linestyle="--",
+                linewidth=2,
+                color=colors.get(method, None),
+                label=f"{method.capitalize()} VaR ({breach_rate:.2%})")
+
+        # Breach markers
+        breach_mask = results_df[f"{method}_breach"]
+        ax.scatter(
+            results_df.loc[breach_mask, "date"],
+            results_df.loc[breach_mask, "actual_return"],
+            marker="x",
+            s=40,
+            color=colors.get(method, None),
+            alpha=0.9
+        )
+
+    # Zero return line
+    ax.axhline(0, color="gray", linestyle="--", linewidth=1)
+
+    # Formatting
+    title_symbol = coin_symbol.upper() if coin_symbol else ""
+    ax.set_title(f"Rolling {int(alpha*100)}% VaR Backtest {title_symbol}",
+                 fontsize=14,
+                 fontweight="bold")
+
+    ax.set_ylabel("Log Returns")
+    ax.set_xlabel("Date")
+    ax.grid(alpha=0.2)
+
+    ax.legend(loc="upper right", frameon=True)
+    fig.tight_layout()
+
     return fig
 
 if __name__ == "__main__":

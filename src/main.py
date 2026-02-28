@@ -99,7 +99,7 @@ def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd"
         results_df.to_csv(backtest_path, index=False)
         print(f"Full backtest results saved to {backtest_path}")
 
-        plot_rolling_var(results_df)
+        plot_rolling_var(results_df, summary_df, methods=["normal", "student_t", "historical"], alpha=alpha, coin_symbol=coin_symbol)
 
     plt.show()
 
