@@ -97,6 +97,7 @@ def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd"
         print(summary_df.to_string())
 
         backtest_path = base_dir / "data" / "backtest" / f"{coin_symbol}-backtest-results.csv"
+        backtest_path.parent.mkdir(parents=True, exist_ok=True)
         results_df.to_csv(backtest_path, index=False)
         print(f"Full backtest results saved to {backtest_path}")
 

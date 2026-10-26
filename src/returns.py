@@ -89,9 +89,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--verbose",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="Print summary statistics (default: True)"
+        help="Print summary statistics (default: on; use --no-verbose to silence)"
     )
 
     args = parser.parse_args()
