@@ -32,7 +32,8 @@ def fit_student_t(returns: pd.Series) -> Tuple[float, float, float]:
     returns: Series of asset returns.
     
     Output ----------
-    df, loc, scale: Degrees of freedom (df), location (mean), scale (std).
+    df, loc, scale: Degrees of freedom (df), location, and scale. Note scale is NOT the
+    standard deviation; for df > 2, std = scale * sqrt(df / (df - 2)).
     """
 
     df, loc, scale = t.fit(returns)

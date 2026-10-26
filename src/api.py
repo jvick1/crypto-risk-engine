@@ -19,7 +19,7 @@ def fetch_historical_data(ticker: str) -> pd.DataFrame:
     
     Returns
     -------
-    DataFrame with columns: snapped_at & close_price
+    DataFrame with columns: snapped_at (UTC timestamp) & price (daily Close)
     """
     # Download daily data, full history available
     df = yf.download(ticker, period="max", interval="1d", progress=False, auto_adjust=False)

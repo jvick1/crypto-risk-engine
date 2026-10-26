@@ -1,6 +1,7 @@
 """
 Author: Jake Vick
-Purpose: End-to-end execution of distribution fitting, visualization, and risk metrics
+Purpose: End-to-end execution: download data, compute log returns, fit distributions, plot,
+print Normal / Student-t VaR & CVaR, and (with --backtest) run the rolling VaR backtest
 
 Run w/ python -m src.main --coin_symbol eth
 """
@@ -121,7 +122,7 @@ if __name__ == "__main__":
         "--alpha",
         type=float,
         default=0.05,
-        help="Confidence level for VaR/CVaR (default: 0.05 = 95%)"
+        help="Tail probability for VaR/CVaR (default: 0.05, i.e. 95%% VaR)"
     )
     parser.add_argument(
         "--backtest", 

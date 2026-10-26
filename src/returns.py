@@ -1,6 +1,6 @@
 """
 Author: Jake Vick
-Purpose: Compute log returns for Student-t VaR / CVaR modeling
+Purpose: Compute daily log returns from raw price data (used by the Normal, Student-t and Historical VaR / CVaR methods)
 """
 
 from pathlib import Path
@@ -34,7 +34,7 @@ def compute_log_returns(
     date_col: Column containing timestamp
 
     Output ----------
-    output/data.csv
+    CSV at output_path (default data/output/{coin_symbol}-log-returns.csv) with columns: date, return
     """
 
     # Load raw data
