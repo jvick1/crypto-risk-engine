@@ -155,7 +155,7 @@ def plot_rolling_var(results_df: pd.DataFrame,
 
 if __name__ == "__main__":
     """
-    When you run it as a module, make sure you are in the \student_t_var_cvar\ folder and run `python -m src.visualization`, Python understands the package structure and relative imports correctly.
+    When you run it as a module, make sure you are in the repository root (crypto-risk-engine/) folder and run `python -m src.visualization`, Python understands the package structure and relative imports correctly.
     """
     from .distributions import fit_normal, fit_student_t
     

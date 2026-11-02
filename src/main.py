@@ -1,6 +1,7 @@
 """
 Author: Jake Vick
-Purpose: End-to-end execution of distribution fitting, visualization, and risk metrics
+Purpose: End-to-end execution: download data, compute log returns, fit distributions, plot,
+print Normal / Student-t VaR & CVaR, and (with --backtest) run the rolling VaR backtest
 
 Run w/ python -m src.main --coin_symbol eth
 """
@@ -96,6 +97,7 @@ def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd"
         print(summary_df.to_string())
 
         backtest_path = base_dir / "data" / "backtest" / f"{coin_symbol}-backtest-results.csv"
+        backtest_path.parent.mkdir(parents=True, exist_ok=True)
         results_df.to_csv(backtest_path, index=False)
         print(f"Full backtest results saved to {backtest_path}")
 
@@ -121,7 +123,7 @@ if __name__ == "__main__":
         "--alpha",
         type=float,
         default=0.05,
-        help="Confidence level for VaR/CVaR (default: 0.05 = 95%)"
+        help="Tail probability for VaR/CVaR (default: 0.05, i.e. 95%% VaR)"
     )
     parser.add_argument(
         "--backtest", 
