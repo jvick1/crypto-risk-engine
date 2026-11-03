@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Tuple
 from tqdm import tqdm
 
+from .backtest_tests import christoffersen_cc
 from .distributions import fit_normal, fit_student_t
 from .risk_metrics import (
     compute_var_normal, compute_cvar_normal,
@@ -25,7 +26,8 @@ def rolling_backtest(df_returns: pd.DataFrame, window_size: int = 252, alpha: fl
 
     Output -------
     results_df: DataFrame with dates, actual returns, VaR/CVaR for each method, and breach flags
-    summary_df: Breach rate summary per method
+    summary_df: Per-method breaches, expected, breach rate, Kupiec POF / Christoffersen
+                independence / conditional coverage LR stats, p-values, reject at 5%
     """
     # Ensure sorted by date ascending
     df_returns = df_returns.sort_values("date").reset_index(drop=True)
@@ -73,19 +75,11 @@ def rolling_backtest(df_returns: pd.DataFrame, window_size: int = 252, alpha: fl
     for method in methods:
         results_df[f"{method}_breach"] = results_df["actual_return"] < results_df[f"{method}_var"]
 
-    # Summary: Breach rates
-    summary = {}
-    for method in methods:
-        breaches = results_df[f"{method}_breach"].sum()
-        total_oos = len(results_df)
-        breach_rate = breaches / total_oos if total_oos > 0 else 0
-        summary[method] = {
-            "breaches": breaches,
-            "total_periods": total_oos,
-            "breach_rate": breach_rate,
-            "expected_rate": alpha
-        }
+    # Summary: breach rates plus Kupiec / Christoffersen tests.
+    # Note: rolling windows overlap, so the tests' independence assumption is approximate.
+    summary = {m: christoffersen_cc(results_df[f"{m}_breach"].values, alpha) for m in methods}
     summary_df = pd.DataFrame(summary).T
+    summary_df.index.name = "method"
 
     return results_df, summary_df
 
