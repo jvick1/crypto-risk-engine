@@ -25,7 +25,7 @@ python -m src.main --coin_symbol btc --vs_currency usd --backtest --window_size 
 Flags:
 - `--coin_symbol` (default `btc`) and `--vs_currency` (default `usd`) build the Yahoo ticker, e.g. `BTC-USD`.
 - `--alpha` is a **tail probability** (default `0.05`, i.e. 95% VaR), not a confidence level.
-- `--backtest` is required to run the rolling backtest and write `data/backtest/{coin_symbol}-backtest-results.csv`; without it only the full-sample fit and risk metrics are produced.
+- `--backtest` is required to run the rolling backtest and write `data/backtest/{coin_symbol}-backtest-results.csv` plus `data/backtest/{coin_symbol}-backtest-summary.csv` (per-method breaches, expected breaches, breach rate, Kupiec POF / Christoffersen independence / conditional coverage LR stats, p-values and reject-at-5% flags); without it only the full-sample fit and risk metrics are produced.
 - `--window_size` is the rolling window length in observations (default `252`; crypto trades every day, so this is about 8 months).
 
 Tests:
@@ -43,7 +43,8 @@ crypto-risk-engine/
 │   ├── output/
 │   │   └── {coin_symbol}-log-returns.csv          # Log Returns
 │   └── backtest/
-│       └── {coin_symbol}-backtest-results.csv     # Backtest outputs
+│       ├── {coin_symbol}-backtest-results.csv     # Backtest outputs
+│       └── {coin_symbol}-backtest-summary.csv     # Breach tests summary
 │
 ├── src/
 │   ├── __init__.py                                # Package marker
@@ -77,7 +78,7 @@ Returns distributions with fitted Normal & Student-t overlay, QQ-plots against e
 Calculates VaR & CVaR from the fitted Normal and Student-t distributions, plus Historical (empirical) VaR & CVaR. VaR/CVaR are quantiles of log returns and are negative numbers for losses (left tail).
 
 ## `backtest.py`
-Using 3x methods (historical, normal, student-t) backtest VaR w/ rolling window 
+Using 3x methods (historical, normal, student-t) backtest VaR w/ rolling window, then run Kupiec POF and Christoffersen independence / conditional coverage tests (`backtest_tests.py`). Rolling windows overlap, so the tests' independence assumption is approximate. 
 
 ## `main.py`
 Orchestration Layer - runs ETL (pull & log), distributions, backtesting (only with `--backtest`), visualization, and calcs risk metrics for `{coin_symbol}`.
@@ -104,3 +105,6 @@ This backtest chart shows the rolling VaR (`--alpha`, default 5%) est for return
 
 <img height="400" alt="Image" src="https://github.com/user-attachments/assets/35557aad-8fc7-410e-8c03-490eb3535509" />
 
+
+
+See [ROADMAP.md](ROADMAP.md) for planned phases. Educational project, not investment advice.
