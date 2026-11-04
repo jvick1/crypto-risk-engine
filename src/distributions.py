@@ -7,6 +7,7 @@ from typing import Tuple
 from scipy.stats import norm, t
 from pathlib import Path
 import argparse
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -25,19 +26,54 @@ def fit_normal(returns: pd.Series) -> Tuple[float, float]:
     sigma = np.std(returns)
     return mu, sigma
 
+DF_FLOOR = 2.01
+"""Lower bound on Student-t degrees of freedom (variance is finite only for df > 2)."""
+
+DF_NORMAL_FALLBACK = 1e6
+"""df used when the t fit fails; a t with this df is numerically Normal."""
+
+
+def _valid(df: float, loc: float, scale: float) -> bool:
+    return all(np.isfinite([df, loc, scale])) and df > 0 and scale > 0
+
+
 def fit_student_t(returns: pd.Series) -> Tuple[float, float, float]:
-    """Fit a Student's t distribution to returns using MLE.
-    
+    """Fit a Student's t distribution to returns using MLE, with df bounded to df >= DF_FLOOR.
+
+    If the unconstrained MLE gives df < DF_FLOOR, the fit is redone with df fixed at
+    DF_FLOOR. If the fit fails or returns invalid parameters, it falls back to a
+    Normal-equivalent t (df = DF_NORMAL_FALLBACK, loc = mean, scale = std) and warns.
+
     Parameters ----------
     returns: Series of asset returns.
-    
+
     Output ----------
     df, loc, scale: Degrees of freedom (df), location, and scale. Note scale is NOT the
     standard deviation; for df > 2, std = scale * sqrt(df / (df - 2)).
     """
 
-    df, loc, scale = t.fit(returns)
-    return df, loc, scale
+    x = np.asarray(returns, dtype=float)
+    x = x[np.isfinite(x)]
+    if x.size == 0:
+        raise ValueError("fit_student_t: no finite returns to fit")
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            df, loc, scale = t.fit(x)
+            if _valid(df, loc, scale) and df < DF_FLOOR:
+                df, loc, scale = t.fit(x, f0=DF_FLOOR)
+                df = DF_FLOOR
+        if _valid(df, loc, scale) and df >= DF_FLOOR:
+            return float(df), float(loc), float(scale)
+        reason = f"invalid params (df={df}, loc={loc}, scale={scale})"
+    except Exception as e:  # scipy optimiser failures
+        reason = f"{type(e).__name__}: {e}"
+
+    mu, sigma = fit_normal(x)
+    scale = sigma if sigma > 0 else np.finfo(float).eps
+    warnings.warn(f"Student-t fit failed ({reason}); falling back to Normal", RuntimeWarning)
+    return DF_NORMAL_FALLBACK, float(mu), float(scale)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test fitting Normal & Student-t distributions")
