@@ -56,12 +56,21 @@ def compute_cvar_student_t(df: float, loc: float, scale: float, alpha: float = 0
     """
     Compute parametric CVaR (Expected Shortfall) for Student-t distribution.
 
+    ES = loc - scale * (pdf(q) / alpha) * (df + q^2) / (df - 1), q = t.ppf(alpha, df).
+    The mean (and so ES) only exists for df > 1; a ValueError is raised otherwise.
+
     Parameters ----------
     df, loc, scale, alpha
 
     Output ----------
     CVaR estimate
     """
+    if not np.isfinite(df) or df <= 1:
+        raise ValueError(f"Student-t CVaR is undefined for df <= 1 (got df={df})")
+    if not np.isfinite(scale) or scale < 0:
+        raise ValueError(f"scale must be finite and >= 0 (got {scale})")
+    if not 0 < alpha < 1:
+        raise ValueError(f"alpha must be in (0, 1) (got {alpha})")
     t_q = t.ppf(alpha, df)
     density = t.pdf(t_q, df)
     adjustment = (df + t_q**2) / (df - 1)
