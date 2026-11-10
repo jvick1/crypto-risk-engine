@@ -50,4 +50,5 @@ Crypto daily returns are fat-tailed and volatile. A Normal-distribution VaR tend
 - `--backtest` writes `data/backtest/{coin}-backtest-results.csv` and `{coin}-backtest-summary.csv`, with no look-ahead (each forecast uses only the prior `window_size` returns).
 - Fitted Student-t df is always >= 2.01; CVaR is never NaN/inf for valid inputs.
 - Backtest results are interpreted with the statistical tests, not only the raw breach rate. Reference point (11/4 BTC run, alpha 0.05, window 252): after the Phase 2 df floor, Student-t had 241 breaches and a Kupiec p-value of 0.026 (reject at 5%); see [ROADMAP.md](ROADMAP.md).
+- Look and voice follow the draft [Design brief](DESIGN_BRIEF.md) (not yet applied to code).
 - Docs (this PRD, [TRD](TRD.md), [App flow](APP_FLOW.md), [Schema](SCHEMA.md), [Roadmap](ROADMAP.md)) match the code; anything not built is marked planned.

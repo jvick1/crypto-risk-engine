@@ -10,7 +10,7 @@ The pipeline is organized to clearly separate raw data, log returns, distributio
 - [App flow](docs/APP_FLOW.md)
 - [Data schema](docs/SCHEMA.md)
 - [Roadmap / implementation plan](docs/ROADMAP.md)
-- Design brief (brand, look and voice): to be linked here when it arrives from Cypher-Fi Advisor.
+- [Design brief](docs/DESIGN_BRIEF.md): brand, look and voice (draft)
 
 # Install
 ```
