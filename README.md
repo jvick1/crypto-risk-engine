@@ -4,6 +4,14 @@ This project develops a modular risk analytics framework for estimating and back
 
 The pipeline is organized to clearly separate raw data, log returns, distribution fitting, rolling window estimation, and out of sample backtesting. The `backtest.py` module uses a rolling window (default 252 observations) to evaluate model performance via breach frequency. The `visualization.py` module provides distribution diagnostics, tail comparisons, and rolling VaR monitoring to support model selection and risk interpretation.
 
+# Docs
+- [Product requirements (PRD)](docs/PRD.md)
+- [Technical requirements (TRD)](docs/TRD.md)
+- [App flow](docs/APP_FLOW.md)
+- [Data schema](docs/SCHEMA.md)
+- [Roadmap / implementation plan](docs/ROADMAP.md)
+- Design brief (brand, look and voice): to be linked here when it arrives from Cypher-Fi Advisor.
+
 # Install
 ```
 python -m venv .venv
@@ -54,8 +62,10 @@ crypto-risk-engine/
 │   ├── visualization.py                           # Plots (PDF, QQ, density, and rolling window)
 │   ├── risk_metrics.py                            # VaR & CVaR (Normal, Student-t, Historical)
 │   ├── backtest.py                                # Rolling VaR backtest
+│   ├── backtest_tests.py                          # Kupiec / Christoffersen tests
 │   └── main.py                                    # Orchestration Layer
 │
+├── docs/                                          # PRD, TRD, app flow, schema, roadmap
 ├── tests/                                         # pytest sanity tests
 ├── .gitignore
 ├── requirements.txt                               # Pinned dependencies
