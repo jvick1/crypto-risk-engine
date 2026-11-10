@@ -107,4 +107,4 @@ This backtest chart shows the rolling VaR (`--alpha`, default 5%) est for return
 
 
 
-See [ROADMAP.md](ROADMAP.md) for planned phases. Educational project, not investment advice.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for planned phases. Educational project, not investment advice.
