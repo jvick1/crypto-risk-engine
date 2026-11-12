@@ -53,6 +53,26 @@ Written by `main.py` with `--backtest` (added in Phase 1; none committed yet). O
 | `lr_cc`, `p_cc` | float | Conditional coverage LR (`lr_pof + lr_ind`) and p-value (chi2, 2 df) |
 | `reject_pof_5pct`, `reject_ind_5pct`, `reject_cc_5pct` | bool | p-value < 0.05 |
 
+### 5. Bayes summary: `data/output/{coin}-bayes-summary.csv`
+Written by `main.py` with `--methods ...,bayes` (added in Phase 3; `src.bayes.summarize`). Full sample, one row per quantity. VaR / CVaR are log-return quantiles at `alpha` (negative = loss), like the other methods.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `quantity` | str (index) | `mu`, `sigma`, `nu` (Student-t location, scale, degrees of freedom; `sigma` is the t scale, not the std), `var`, `cvar` |
+| `mean`, `sd`, `median` | float | Posterior mean, sd (ddof=1) and median over all draws (for `var` / `cvar`: of the per-draw closed-form t VaR / CVaR) |
+| `hdi_low`, `hdi_high` | float | Highest-density credible interval with mass `hdi_prob` |
+| `predictive` | float | `var` / `cvar` rows only: exact posterior predictive VaR / CVaR (alpha-quantile and tail mean of the mixture of per-draw t's); empty for parameters |
+| `r_hat` | float | Rank-normalized R-hat (parameter rows only; warn if > 1.01) |
+| `ess_bulk`, `ess_tail` | float | Bulk and tail effective sample size (parameter rows only; warn if < 400) |
+| `alpha` | float | Tail probability used |
+| `hdi_prob` | float | HDI mass (default 0.94) |
+| `n_obs` | int | Number of finite log returns fitted |
+| `chains`, `draws` | int | Chains and kept draws per chain (`--tune` warm-up is discarded and not recorded) |
+| `seed` | int | `--seed` used |
+| `divergences` | int | Divergent NUTS transitions after tuning (should be 0) |
+
+Committed example: `btc`, from the live 2026-11-12 run (alpha 0.05, `n_obs` 4,439, 4 chains x 1,000 draws, seed 42). It is newer than the committed `btc-log-returns.csv` (which ends 2026-02-28), so rerunning on the committed CSV with `python -m src.bayes` gives slightly different numbers.
+
 ## Plot outputs
 Figures are shown interactively with `plt.show()` at the end of `main`; **they are not saved to disk** (the README images are hosted on GitHub).
 
@@ -73,5 +93,9 @@ There is no config file or environment variable. Configuration is the CLI flags 
 | Test significance `sig` | `0.05` | `src/backtest_tests.christoffersen_cc` |
 | Yahoo download | `period="max"`, `interval="1d"`, `auto_adjust=False` | `src/api.py` |
 | Default methods | `["normal", "student_t", "historical"]` | `src/backtest.rolling_backtest` |
+| Default `--methods` | `normal,t` (Bayes and Historical opt-in) | `src/main.DEFAULT_METHODS` |
+| `RHAT_MAX` | `1.01` | `src/bayes.py` (R-hat warning threshold) |
+| `ESS_MIN` | `400` | `src/bayes.py` (bulk / tail ESS warning threshold) |
+| Bayes priors | `mu_z ~ Normal(0, 0.5)`, `sigma_z ~ HalfNormal(1)`, `nu = 2 + Gamma(2, 0.1)` on `returns / std` | `src/bayes.build_model` (rationale in [TRD.md](TRD.md#bayesian-student-t-phase-3---methods-bayes)) |
 
-**Planned** (Phase 3-4): Bayesian outputs (posterior VaR/CVaR with credible intervals, R-hat/ESS) and a fit cache; schema to be added here when built.
+**Planned** (Phase 4): rolling Bayesian backtest outputs and a fit cache; schema to be added here when built.
