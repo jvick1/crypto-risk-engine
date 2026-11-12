@@ -8,7 +8,10 @@ import pandas as pd
 import pytest
 from scipy.stats import t
 
-from src.bayes import PARAMS, check_diagnostics, fit_bayes_student_t, hdi, run_bayes, summarize
+from src.bayes import (
+    PARAMS, check_diagnostics, fit_bayes_student_t, hdi, predictive_var_cvar, run_bayes, summarize,
+)
+from src.risk_metrics import compute_cvar_student_t, compute_var_student_t
 from src.main import parse_methods
 
 TINY = dict(draws=150, tune=150, chains=2, cores=1)
@@ -66,6 +69,21 @@ def test_hdi_contains_mass():
     lo, hi = hdi(x, 0.94)
     assert np.mean((x >= lo) & (x <= hi)) == pytest.approx(0.94, abs=0.01)
     assert lo == pytest.approx(-1.88, abs=0.1) and hi == pytest.approx(1.88, abs=0.1)
+
+
+def test_predictive_single_draw_matches_closed_form():
+    var, cvar = predictive_var_cvar(np.array([0.001]), np.array([0.02]), np.array([4.0]), 0.05)
+    assert var == pytest.approx(compute_var_student_t(4.0, 0.001, 0.02, 0.05), rel=1e-8)
+    assert cvar == pytest.approx(compute_cvar_student_t(4.0, 0.001, 0.02, 0.05), rel=1e-8)
+
+
+def test_predictive_mixture_matches_simulation():
+    rng = np.random.default_rng(3)
+    mu, sigma, nu = rng.normal(0, 0.001, 50), rng.uniform(0.015, 0.025, 50), rng.uniform(4, 8, 50)
+    var, cvar = predictive_var_cvar(mu, sigma, nu, 0.05)
+    y = np.repeat(mu, 20_000) + np.repeat(sigma, 20_000) * t.rvs(np.repeat(nu, 20_000), random_state=rng)
+    assert var == pytest.approx(np.quantile(y, 0.05), rel=0.01)
+    assert cvar == pytest.approx(y[y <= np.quantile(y, 0.05)].mean(), rel=0.02)
 
 
 def test_check_diagnostics_warns_on_bad_rhat(summary):

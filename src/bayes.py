@@ -25,9 +25,11 @@ VaR / CVaR:
 - Per draw: the closed-form Student-t VaR / CVaR (same formulas as risk_metrics.py) for
   each posterior draw (mu, sigma, nu). This gives a posterior distribution of VaR and
   CVaR, summarized by mean, median, sd and an HDI (parameter uncertainty).
-- Posterior predictive: simulate future returns from every draw (n_ppc per draw) and take
-  the empirical alpha-quantile and the mean below it. This single number integrates over
-  parameter uncertainty and is the Bayesian "point" VaR / CVaR.
+- Posterior predictive: the predictive distribution of tomorrow's return is the mixture of
+  the per-draw t's. Its alpha-quantile (VaR) and tail mean (CVaR) are computed exactly
+  (root-finding + closed-form t partial expectation) rather than by simulating returns,
+  because with nu near 2 a simulated tail mean is very noisy. This single number
+  integrates over parameter uncertainty and is the Bayesian "point" VaR / CVaR.
 
 Educational project, not investment advice.
 """
@@ -41,6 +43,7 @@ from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import brentq
 from scipy.stats import t
 
 from .risk_metrics import compute_var_student_t, compute_cvar_student_t
@@ -172,18 +175,34 @@ def per_draw_var_cvar(mu: np.ndarray, sigma: np.ndarray, nu: np.ndarray, alpha: 
     return var, cvar
 
 
-def predictive_var_cvar(mu, sigma, nu, alpha: float, n_ppc: int = 50, seed: int = 42):
-    """Posterior predictive VaR / CVaR: simulate n_ppc returns per draw, then take the
-    empirical alpha-quantile and the mean of returns at or below it."""
-    rng = np.random.default_rng(seed)
-    z = t.rvs(np.repeat(nu, n_ppc), size=nu.size * n_ppc, random_state=rng)
-    y = np.repeat(mu, n_ppc) + np.repeat(sigma, n_ppc) * z
-    var = float(np.quantile(y, alpha))
-    cvar = float(y[y <= var].mean())
-    return var, cvar
+def predictive_var_cvar(mu: np.ndarray, sigma: np.ndarray, nu: np.ndarray, alpha: float):
+    """Posterior predictive VaR / CVaR, computed exactly (no simulation noise).
+
+    The posterior predictive of a new return is the equal-weight mixture of the per-draw
+    Student-t's. VaR is its alpha-quantile q, found by root-finding mean_i F_i(q) = alpha
+    (q lies between the smallest and largest per-draw VaR). CVaR uses the closed-form
+    Student-t partial expectation, with z_i = (q - mu_i) / sigma_i:
+        E_i[X; X <= q] = mu_i * F(z_i) - sigma_i * (nu_i + z_i^2) / (nu_i - 1) * f(z_i)
+        CVaR = mean_i E_i[X; X <= q] / alpha
+    For a single draw this reduces to compute_cvar_student_t.
+    """
+    mu, sigma, nu = (np.asarray(a, dtype=float) for a in (mu, sigma, nu))
+
+    def mix_cdf(q):
+        return float(np.mean(t.cdf((q - mu) / sigma, nu)))
+
+    per_draw = mu + sigma * t.ppf(alpha, nu)
+    lo, hi = float(per_draw.min()), float(per_draw.max())
+    if hi - lo < 1e-15:
+        q = lo
+    else:
+        q = brentq(lambda v: mix_cdf(v) - alpha, lo, hi, xtol=1e-12)
+    z = (q - mu) / sigma
+    partial = mu * t.cdf(z, nu) - sigma * (nu + z**2) / (nu - 1) * t.pdf(z, nu)
+    return float(q), float(np.mean(partial) / alpha)
 
 
-def summarize(idata, alpha: float = 0.05, hdi_prob: float = 0.94, n_ppc: int = 50,
+def summarize(idata, alpha: float = 0.05, hdi_prob: float = 0.94,
               seed: int = 42, n_obs: Optional[int] = None) -> pd.DataFrame:
     """Posterior summary table: one row per quantity (mu, sigma, nu, var, cvar).
 
@@ -194,7 +213,7 @@ def summarize(idata, alpha: float = 0.05, hdi_prob: float = 0.94, n_ppc: int = 5
         raise ValueError(f"alpha must be in (0, 1) (got {alpha})")
     d = posterior_draws(idata)
     var, cvar = per_draw_var_cvar(d["mu"], d["sigma"], d["nu"], alpha)
-    pred_var, pred_cvar = predictive_var_cvar(d["mu"], d["sigma"], d["nu"], alpha, n_ppc, seed)
+    pred_var, pred_cvar = predictive_var_cvar(d["mu"], d["sigma"], d["nu"], alpha)
     diag = diagnostics(idata)
 
     samples = {**d, "var": var, "cvar": cvar}
@@ -245,7 +264,7 @@ def check_diagnostics(summary: pd.DataFrame, rhat_max: float = RHAT_MAX, ess_min
 
 
 def run_bayes(returns, alpha: float = 0.05, draws: int = 1000, tune: int = 1000, chains: int = 4,
-              seed: int = 42, hdi_prob: float = 0.94, n_ppc: int = 50, cores: Optional[int] = None,
+              seed: int = 42, hdi_prob: float = 0.94, cores: Optional[int] = None,
               progressbar: bool = False):
     """Fit + summarize + check. Returns (summary_df, runtime_seconds)."""
     x = np.asarray(returns, dtype=float)
@@ -253,7 +272,7 @@ def run_bayes(returns, alpha: float = 0.05, draws: int = 1000, tune: int = 1000,
     t0 = time.perf_counter()
     idata = fit_bayes_student_t(x, draws=draws, tune=tune, chains=chains, cores=cores,
                                 seed=seed, progressbar=progressbar)
-    summary = summarize(idata, alpha=alpha, hdi_prob=hdi_prob, n_ppc=n_ppc, seed=seed, n_obs=x.size)
+    summary = summarize(idata, alpha=alpha, hdi_prob=hdi_prob, seed=seed, n_obs=x.size)
     runtime = time.perf_counter() - t0
     check_diagnostics(summary)
     return summary, runtime
