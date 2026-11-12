@@ -10,10 +10,11 @@ Educational project — not investment advice. Each phase lands on its own featu
 | 3 | PyMC Bayesian Student-t on the full sample, `--methods bayes` | Planned | Weakly informative priors with nu > 2; VaR/CVaR from the posterior predictive with credible intervals; R-hat and ESS reported (warn if R-hat > 1.01); seeded and reproducible; tests pass |
 | 4 | Rolling Bayesian backtest | Planned | Refit every k days (configurable), warm start from previous posterior, conjugate Normal-Inverse-Gamma fast path, cached fits; output feeds the Phase 1 summary; runtime documented |
 | 5 | README update | Planned | README documents all methods, flags, outputs and caveats, and matches the code |
+| 6 | Performance profiling: detailed timing logs plus a pipeline workflow diagram | Planned | Each pipeline stage (data pull, returns, fits, risk metrics, backtest loop, plots) logs its wall-clock time through Python `logging` with a `--log-level` / `--profile` flag; a timing summary is printed and saved per run; `docs/APP_FLOW.md` diagram is labeled with measured stage times from a real run; bottlenecks are ranked |
+| 7 | Speedups chosen from the Phase 6 results (scope left open until profiling is done) | Planned | Candidates include parallelizing backtest refits (multiprocessing or threads), caching raw data for popular coins such as BTC and pulling only the new rows since the last run (delta update), and caching fits/results; each change is benchmarked before and after on the same run, and backtest output stays identical unless a difference is documented |
 
 ## Backlog (unscheduled)
 - `--ticker` support for stocks (ticker currently forced to `{COIN}-{VS}`)
 - EWMA / GARCH volatility models
 - CVaR backtest (e.g. Acerbi–Székely)
-- Faster backtest (vectorize / parallelize Student-t refits)
 - CI (GitHub Actions running pytest)
