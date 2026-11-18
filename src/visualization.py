@@ -109,7 +109,8 @@ def plot_rolling_var(results_df: pd.DataFrame,
     colors = {
         "normal": "#1f77b4",
         "student_t": "#ff7f0e",
-        "historical": "#2ca02c"
+        "historical": "#2ca02c",
+        "bayes": "#d62728"
     }
 
     # Plot VaR lines + breaches

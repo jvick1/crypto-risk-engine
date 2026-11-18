@@ -6,6 +6,7 @@ PyMC Bayesian Student-t on request), and (with --backtest) run the rolling VaR b
 
 Run w/ python -m src.main --coin_symbol eth
        python -m src.main --coin_symbol btc --methods normal,t,hist,bayes
+       python -m src.main --coin_symbol btc --methods normal,t,bayes --backtest --bayes_engine conjugate
 """
 
 from pathlib import Path
@@ -31,7 +32,8 @@ from .risk_metrics import (
     compute_var_historical,
     compute_cvar_historical
 )
-from .backtest import rolling_backtest
+from .backtest import rolling_backtest, save_backtest_outputs
+from .rolling_bayes import ENGINES, BT_DRAWS, BT_TUNE, BT_CHAINS
 
 METHOD_CHOICES = ("normal", "t", "hist", "bayes")
 DEFAULT_METHODS = "normal,t"  # current behavior; bayes is opt-in because MCMC is slow
@@ -72,7 +74,9 @@ def etl(coin_symbol: str, vs_currency: str, base_dir: Path):
     return returns_path
 
 def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd", backtest: bool = False, window_size: int = 252,
-         methods: list = None, seed: int = 42, draws: int = 1000, tune: int = 1000, chains: int = 4, hdi_prob: float = 0.94):
+         methods: list = None, seed: int = 42, draws: int = 1000, tune: int = 1000, chains: int = 4, hdi_prob: float = 0.94,
+         bayes_engine: str = "mcmc", refit_every: int = None, bt_draws: int = BT_DRAWS, bt_tune: int = BT_TUNE,
+         bt_chains: int = BT_CHAINS, use_cache: bool = True):
     if methods is None:
         methods = parse_methods(DEFAULT_METHODS)
     base_dir = Path(__file__).resolve().parents[1]
@@ -127,9 +131,16 @@ def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd"
         print(f"Bayes summary saved to {bayes_path}")
 
     if backtest:
+        bt_methods = ["normal", "student_t", "historical"] + (["bayes"] if "bayes" in methods else [])
         print(f"\nRunning rolling backtest with window={window_size}...")
         df_returns["date"] = pd.to_datetime(df_returns["date"])  # Ensure datetime
-        results_df, summary_df = rolling_backtest(df_returns, window_size, alpha)
+        results_df, summary_df, refits_df = rolling_backtest(
+            df_returns, window_size, alpha, methods=bt_methods,
+            bayes_engine=bayes_engine, refit_every=refit_every, bayes_draws=bt_draws,
+            bayes_tune=bt_tune, bayes_chains=bt_chains, seed=seed,
+            cache_dir=base_dir / "data" / "cache" / "rolling-bayes" if use_cache else None,
+            return_refits=True,
+        )
 
         print("\nBacktest Results (first 5 rows):")
         print(results_df.head().to_string(index=False))
@@ -137,16 +148,9 @@ def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd"
         print("\nBacktest Summary (Kupiec POF, Christoffersen independence & conditional coverage):")
         print(summary_df.to_string())
 
-        backtest_path = base_dir / "data" / "backtest" / f"{coin_symbol}-backtest-results.csv"
-        backtest_path.parent.mkdir(parents=True, exist_ok=True)
-        results_df.to_csv(backtest_path, index=False)
-        print(f"Full backtest results saved to {backtest_path}")
+        save_backtest_outputs(base_dir, coin_symbol, results_df, summary_df, refits_df)
 
-        summary_path = base_dir / "data" / "backtest" / f"{coin_symbol}-backtest-summary.csv"
-        summary_df.to_csv(summary_path)
-        print(f"Backtest summary saved to {summary_path}")
-
-        plot_rolling_var(results_df, summary_df, methods=["normal", "student_t", "historical"], alpha=alpha, coin_symbol=coin_symbol)
+        plot_rolling_var(results_df, summary_df, methods=bt_methods, alpha=alpha, coin_symbol=coin_symbol)
 
     plt.show()
 
@@ -188,7 +192,7 @@ if __name__ == "__main__":
         type=parse_methods,
         default=DEFAULT_METHODS,
         help="Comma-separated full-sample methods: normal, t, hist, bayes (default: normal,t; bayes is slow). "
-             "The --backtest methods are unchanged (normal, student_t, historical)"
+             "--backtest always runs normal, student_t and historical, and adds the rolling Bayes backtest when bayes is listed"
     )
     parser.add_argument(
         "--seed",
@@ -221,7 +225,30 @@ if __name__ == "__main__":
         help="Bayes: highest-density credible interval mass (default: 0.94)"
     )
 
+    parser.add_argument(
+        "--bayes_engine",
+        choices=ENGINES,
+        default="mcmc",
+        help="Backtest Bayes engine: mcmc (Student-t, NUTS, default) or conjugate (Normal-Inverse-Gamma, closed form, fast)"
+    )
+    parser.add_argument(
+        "--refit_every",
+        type=int,
+        default=None,
+        help="Backtest Bayes: refit every k days, reusing the last posterior in between (default: 21 for mcmc, 1 for conjugate)"
+    )
+    parser.add_argument("--bt_draws", type=int, default=BT_DRAWS,
+                        help=f"Backtest Bayes (mcmc): draws per chain per refit (default: {BT_DRAWS})")
+    parser.add_argument("--bt_tune", type=int, default=BT_TUNE,
+                        help=f"Backtest Bayes (mcmc): tuning steps per chain per refit (default: {BT_TUNE})")
+    parser.add_argument("--bt_chains", type=int, default=BT_CHAINS,
+                        help=f"Backtest Bayes (mcmc): chains per refit, run sequentially (default: {BT_CHAINS})")
+    parser.add_argument("--no_cache", action="store_true", default=False,
+                        help="Backtest Bayes (mcmc): do not read or write cached fits in data/cache/rolling-bayes")
+
     args = parser.parse_args()
 
     main(alpha=args.alpha, coin_symbol=args.coin_symbol, vs_currency=args.vs_currency, backtest=args.backtest, window_size=args.window_size,
-         methods=args.methods, seed=args.seed, draws=args.draws, tune=args.tune, chains=args.chains, hdi_prob=args.hdi_prob)
+         methods=args.methods, seed=args.seed, draws=args.draws, tune=args.tune, chains=args.chains, hdi_prob=args.hdi_prob,
+         bayes_engine=args.bayes_engine, refit_every=args.refit_every, bt_draws=args.bt_draws, bt_tune=args.bt_tune,
+         bt_chains=args.bt_chains, use_cache=not args.no_cache)
