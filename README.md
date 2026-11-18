@@ -1,6 +1,6 @@
 # Crypto Risk Engine
 
-This project develops a modular risk analytics framework for estimating and backtesting Value at Risk (VaR) and Conditional Value at Risk (CVaR) across multiple cryptocurrencies. It implements Normal, Student-t, and Historical simulation approaches (parametric Normal/Student-t and historical VaR/CVaR are all in `risk_metrics.py`). With emphasis on Student-t distribution to capture fat-tailed return behavior commonly seen in digital assets. 
+This project develops a modular risk analytics framework for estimating and backtesting Value at Risk (VaR) and Conditional Value at Risk (CVaR) across multiple cryptocurrencies. It implements Normal, Student-t, and Historical simulation approaches (parametric Normal/Student-t and historical VaR/CVaR are all in `risk_metrics.py`), plus an optional Bayesian Student-t (PyMC, `bayes.py`) that adds credible intervals to VaR/CVaR. With emphasis on Student-t distribution to capture fat-tailed return behavior commonly seen in digital assets. 
 
 The pipeline is organized to clearly separate raw data, log returns, distribution fitting, rolling window estimation, and out of sample backtesting. The `backtest.py` module uses a rolling window (default 252 observations) to evaluate model performance via breach frequency. The `visualization.py` module provides distribution diagnostics, tail comparisons, and rolling VaR monitoring to support model selection and risk interpretation.
 
@@ -30,15 +30,22 @@ All Commands:
 ```
 python -m src.main --coin_symbol btc --vs_currency usd --backtest --window_size 252 --alpha 0.05
 ```
+Bayesian Student-t (opt-in, adds about 5 s for BTC):
+```
+python -m src.main --coin_symbol btc --vs_currency usd --alpha 0.05 --methods normal,t,hist,bayes --seed 42
+```
 Flags:
 - `--coin_symbol` (default `btc`) and `--vs_currency` (default `usd`) build the Yahoo ticker, e.g. `BTC-USD`.
 - `--alpha` is a **tail probability** (default `0.05`, i.e. 95% VaR), not a confidence level.
 - `--backtest` is required to run the rolling backtest and write `data/backtest/{coin_symbol}-backtest-results.csv` plus `data/backtest/{coin_symbol}-backtest-summary.csv` (per-method breaches, expected breaches, breach rate, Kupiec POF / Christoffersen independence / conditional coverage LR stats, p-values and reject-at-5% flags); without it only the full-sample fit and risk metrics are produced.
 - `--window_size` is the rolling window length in observations (default `252`; crypto trades every day, so this is about 8 months).
+- `--methods` picks the full-sample methods to print, comma-separated from `normal`, `t`, `hist`, `bayes` (default `normal,t`, the original output). `bayes` runs MCMC, so it is off by default. It does not change the `--backtest` methods.
+- Bayes only: `--seed` (default `42`; same seed and data give the same result), `--draws` (default `1000` per chain), `--tune` (default `1000` warm-up steps per chain), `--chains` (default `4`, run in parallel) and `--hdi_prob` (default `0.94`). With `bayes`, the run also writes `data/output/{coin_symbol}-bayes-summary.csv`.
 
 Tests:
 ```
-python -m pytest
+python -m pytest                 # all 37 tests (about 10 s)
+python -m pytest -m "not slow"   # skip the slower Bayesian recovery test
 ```
 
 # Folder Structure
@@ -49,7 +56,8 @@ crypto-risk-engine/
 │   ├── raw/
 │   │   └── {coin_symbol}-{vs_currency}-max.csv    # Raw daily prices (any coin)
 │   ├── output/
-│   │   └── {coin_symbol}-log-returns.csv          # Log Returns
+│   │   ├── {coin_symbol}-log-returns.csv          # Log Returns
+│   │   └── {coin_symbol}-bayes-summary.csv        # Bayesian Student-t summary (--methods bayes)
 │   └── backtest/
 │       ├── {coin_symbol}-backtest-results.csv     # Backtest outputs
 │       └── {coin_symbol}-backtest-summary.csv     # Breach tests summary
@@ -61,12 +69,14 @@ crypto-risk-engine/
 │   ├── distributions.py                           # Normal & Student-t distribution fitting
 │   ├── visualization.py                           # Plots (PDF, QQ, density, and rolling window)
 │   ├── risk_metrics.py                            # VaR & CVaR (Normal, Student-t, Historical)
+│   ├── bayes.py                                   # Bayesian Student-t (PyMC): VaR/CVaR + credible intervals
 │   ├── backtest.py                                # Rolling VaR backtest
 │   ├── backtest_tests.py                          # Kupiec / Christoffersen tests
 │   └── main.py                                    # Orchestration Layer
 │
 ├── docs/                                          # PRD, TRD, app flow, schema, roadmap
 ├── tests/                                         # pytest sanity tests
+├── pytest.ini                                     # registers the `slow` test marker
 ├── .gitignore
 ├── requirements.txt                               # Pinned dependencies
 └── README.md                                      # Project documentation
@@ -87,11 +97,19 @@ Returns distributions with fitted Normal & Student-t overlay, QQ-plots against e
 ## `risk_metrics.py`
 Calculates VaR & CVaR from the fitted Normal and Student-t distributions, plus Historical (empirical) VaR & CVaR. VaR/CVaR are quantiles of log returns and are negative numbers for losses (left tail).
 
+## `bayes.py`
+Bayesian Student-t on the full sample with PyMC (`--methods bayes`). Weakly informative priors scaled to the data: location ~ Normal(0, half a std), scale ~ HalfNormal(1 std), and degrees of freedom nu = 2 + Gamma(2, 0.1), so nu is always above 2 and the variance stays finite. It reports:
+- the posterior predictive VaR/CVaR (one number that accounts for parameter uncertainty),
+- the posterior mean and a 94% highest-density credible interval for VaR and CVaR, computed from the closed-form Student-t formulas for each posterior draw,
+- posterior summaries for location, scale and nu, with R-hat and bulk/tail effective sample size. It warns if any R-hat is above 1.01, any ESS is below 400, or the sampler has divergences.
+
+Results are saved to `data/output/{coin_symbol}-bayes-summary.csv` (columns in [docs/SCHEMA.md](docs/SCHEMA.md)). Run it alone on the existing returns CSV with `python -m src.bayes --coin_symbol btc`.
+
 ## `backtest.py`
 Using 3x methods (historical, normal, student-t) backtest VaR w/ rolling window, then run Kupiec POF and Christoffersen independence / conditional coverage tests (`backtest_tests.py`). Rolling windows overlap, so the tests' independence assumption is approximate. 
 
 ## `main.py`
-Orchestration Layer - runs ETL (pull & log), distributions, backtesting (only with `--backtest`), visualization, and calcs risk metrics for `{coin_symbol}`.
+Orchestration Layer - runs ETL (pull & log), distributions, backtesting (only with `--backtest`), visualization, and calcs risk metrics for `{coin_symbol}` for the selected `--methods` (Bayesian Student-t only with `bayes`).
 
 # Plots
 

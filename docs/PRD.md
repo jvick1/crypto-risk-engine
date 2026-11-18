@@ -1,6 +1,6 @@
 # Product Requirements: Crypto Risk Engine
 
-> Educational project, not investment advice. Status reflects the `feat/phase2-student-t-guards` branch (Phases 0-2 built; Phases 3-5 planned). See [ROADMAP.md](ROADMAP.md).
+> Educational project, not investment advice. Status reflects the `feat/phase3-bayesian-student-t` branch (Phases 0-2 merged to `main`; Phase 3 built on this branch, awaiting review; Phases 4-8 planned). See [ROADMAP.md](ROADMAP.md).
 
 ## Who it is for
 - **Primary user:** the repo owner (a quant / risk practitioner) studying downside risk of crypto assets from the command line.
@@ -17,6 +17,7 @@ Crypto daily returns are fat-tailed and volatile. A Normal-distribution VaR tend
 - Estimate VaR and CVaR at a user-chosen tail probability `alpha` with Normal, Student-t and Historical methods.
 - Run a rolling-window, no-look-ahead backtest and judge it with Kupiec POF, Christoffersen independence and conditional-coverage tests.
 - Keep the Student-t estimates numerically safe (finite variance, no diverging CVaR).
+- Optionally show parameter uncertainty with a Bayesian Student-t: VaR / CVaR with credible intervals and convergence diagnostics.
 - Keep the code modular (one concern per module), tested, and documented so it matches the code.
 
 ## Non-goals
@@ -33,22 +34,24 @@ Crypto daily returns are fat-tailed and volatile. A Normal-distribution VaR tend
 | Download full daily close history from Yahoo Finance (`{COIN}-{VS}` ticker) | Built | `src/api.py` |
 | Daily log returns + summary stats (mean, std, excess kurtosis) | Built | `src/returns.py` |
 | Normal (MLE) and Student-t (MLE) fits | Built | `src/distributions.py` |
-| Student-t guards: df floor at 2.01, Normal fallback on a failed fit, CVaR guard for df <= 1 | Built (Phase 2, awaiting review) | `src/distributions.py`, `src/risk_metrics.py` |
+| Student-t guards: df floor at 2.01, Normal fallback on a failed fit, CVaR guard for df <= 1 | Built (Phase 2, merged) | `src/distributions.py`, `src/risk_metrics.py` |
 | VaR / CVaR: Normal, Student-t, Historical | Built | `src/risk_metrics.py` |
 | Diagnostic plots: PDF overlay, QQ plots, left-tail density | Built | `src/visualization.py` |
 | Rolling-window backtest (default 252 obs) with breach flags, saved to CSV | Built | `src/backtest.py` |
-| Kupiec POF, Christoffersen independence and conditional-coverage tests; per-method summary CSV | Built (Phase 1, awaiting review) | `src/backtest_tests.py` |
+| Kupiec POF, Christoffersen independence and conditional-coverage tests; per-method summary CSV | Built (Phase 1, merged) | `src/backtest_tests.py` |
 | Rolling VaR plot with breaches | Built (with `--backtest`) | `src/visualization.py` |
-| Bayesian Student-t (PyMC) VaR / CVaR with credible intervals, `--methods bayes` | **Planned** (Phase 3) | - |
+| Bayesian Student-t (PyMC) VaR / CVaR with credible intervals and R-hat / ESS diagnostics, `--methods bayes` (opt-in; full sample only) | Built (Phase 3, awaiting review) | `src/bayes.py`, `src/main.py` |
+| `--methods` selection of full-sample methods (`normal,t,hist,bayes`; Historical now printable from `main`) | Built (Phase 3, awaiting review) | `src/main.py` |
 | Rolling Bayesian backtest (refit every k days, warm start, conjugate fast path, cache) | **Planned** (Phase 4) | - |
 | README refresh covering all methods | **Planned** (Phase 5) | - |
 | `--ticker` for stocks, EWMA/GARCH, CVaR backtest, faster backtest, CI | **Backlog** (unscheduled) | - |
 
 ## Success criteria
-- `python -m pytest` passes (26 tests on the current branch).
+- `python -m pytest` passes (37 tests on the current branch, one marked `slow`; `-m "not slow"` skips it).
 - `python -m src.main --coin_symbol btc` completes end to end on live Yahoo data and prints Normal and Student-t VaR / CVaR.
 - `--backtest` writes `data/backtest/{coin}-backtest-results.csv` and `{coin}-backtest-summary.csv`, with no look-ahead (each forecast uses only the prior `window_size` returns).
 - Fitted Student-t df is always >= 2.01; CVaR is never NaN/inf for valid inputs.
+- `--methods bayes` is seeded (same `--seed` and input give the same posterior), reports R-hat and bulk/tail ESS, and warns if any R-hat > 1.01, any ESS < 400, or any divergence.
 - Backtest results are interpreted with the statistical tests, not only the raw breach rate. Reference point (11/4 BTC run, alpha 0.05, window 252): after the Phase 2 df floor, Student-t had 241 breaches and a Kupiec p-value of 0.026 (reject at 5%); see [ROADMAP.md](ROADMAP.md).
 - Look and voice follow the draft [Design brief](DESIGN_BRIEF.md) (not yet applied to code).
 - Docs (this PRD, [TRD](TRD.md), [App flow](APP_FLOW.md), [Schema](SCHEMA.md), [Roadmap](ROADMAP.md)) match the code; anything not built is marked planned.
