@@ -5,7 +5,7 @@
 ## Files
 
 ### 1. Raw prices: `data/raw/{coin}-{vs}-max.csv`
-Written by `api.save_raw_data`. One row per Yahoo daily bar, full history (`period="max"`).
+Written by `api.save_raw_data`. One row per Yahoo daily bar. The default path is a full history download (`period="max"`). With `--cache_data` (and without `--refresh`), an existing file is loaded, Yahoo is re-fetched from the last date minus 5 days (`DELTA_LOOKBACK_DAYS`), and rows are merged with de-dup by UTC calendar day (newer rows win). Columns are always the flat pair below (yfinance MultiIndex columns are flattened on download).
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -114,7 +114,7 @@ Written by `main.py` with `--profile` (`src/timing.py`). Gitignored (`data/outpu
 | `stage` | str | Stage name, matching the node labels in [APP_FLOW.md](APP_FLOW.md): `data pull`, `returns`, `fits`, `risk metrics`, `bayes`, `plots`, `backtest`, `backtest loop`, `rolling bayes`, `backtest tests`, `rolling var plot` |
 | `parent` | str | Parent stage name, or empty for top-level stages |
 | `seconds` | float | Wall-clock time from `time.perf_counter` |
-| `coin_symbol`, `vs_currency`, `alpha`, `backtest`, `window_size`, `methods`, `seed`, `draws`, `tune`, `chains`, `hdi_prob`, `bayes_engine`, `refit_every`, `bt_draws`, `bt_tune`, `bt_chains`, `use_cache`, `no_plots` | mixed | Run settings, repeated on every row (`methods` is the comma-separated `--methods` string; `refit_every` is empty when the default was left unset) |
+| `coin_symbol`, `vs_currency`, `alpha`, `backtest`, `window_size`, `methods`, `seed`, `draws`, `tune`, `chains`, `hdi_prob`, `bayes_engine`, `refit_every`, `bt_draws`, `bt_tune`, `bt_chains`, `use_cache`, `no_plots`, `workers`, `t_warm_start`, `cache_data`, `refresh` | mixed | Run settings, repeated on every row (`methods` is the comma-separated `--methods` string; `refit_every` is empty when the default was left unset) |
 
 ## Plot outputs
 Plot functions in `visualization.py` return matplotlib Figures; `main` shows them with `plt.show()` at the end of the run unless `--no_plots` is set (which skips generation and show). **They are not saved to disk** (the README images are hosted on GitHub).
@@ -135,6 +135,8 @@ There is no config file or environment variable. Configuration is the CLI flags 
 | `DF_NORMAL_FALLBACK` | `1e6` | `src/distributions.py` (df used when the t fit fails) |
 | Test significance `sig` | `0.05` | `src/backtest_tests.christoffersen_cc` |
 | Yahoo download | `period="max"`, `interval="1d"`, `auto_adjust=False` | `src/api.py` |
+| `DELTA_LOOKBACK_DAYS` | `5` | `src/api.py` (how far back a `--cache_data` delta fetch starts from the last cached date) |
+| CLI default `--workers` | `min(4, cpu_count)` (at least 1) | `src/backtest.default_workers`; `rolling_backtest()` itself defaults to 1 |
 | Default methods | `["normal", "student_t", "historical"]` | `src/backtest.rolling_backtest` |
 | Default `--methods` | `normal,t` (Bayes and Historical opt-in) | `src/main.DEFAULT_METHODS` |
 | `RHAT_MAX` | `1.01` | `src/bayes.py` (R-hat warning threshold) |

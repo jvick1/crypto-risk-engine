@@ -31,7 +31,7 @@ pip install -r requirements.txt
 ```
 
 # How to Run
-Every `python -m src.main` run downloads fresh data from Yahoo Finance (an internet connection is required) and overwrites the committed CSVs under `data/`. Restore them before switching branches or committing:
+Every `python -m src.main` run downloads fresh data from Yahoo Finance by default (an internet connection is required) and overwrites the committed CSVs under `data/`. Pass `--cache_data` to re-fetch only from the last cached date minus 5 days and merge (newer rows win); `--refresh` forces a full `period=max` download even then. Restore the committed files before switching branches or committing:
 
 ```
 git restore data/
@@ -48,7 +48,7 @@ Rolling backtest (always runs Normal, Student-t and Historical):
 ```
 python -m src.main --coin_symbol btc --vs_currency usd --backtest --window_size 252 --alpha 0.05
 ```
-About 92 s for BTC (Student-t MLE loop), measured on the committed BTC run in [docs/ROADMAP.md](docs/ROADMAP.md).
+About 28 s for the rolling MLE loop with the default 4 workers on an 8-CPU box (102 s with `--workers 1`), measured 2026-11-20 on the committed BTC returns in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Bayes full-sample (adds Historical printout and the PyMC Student-t):
 ```
@@ -97,6 +97,10 @@ These are all of the flags from `python -m src.main --help`. There is no `--verb
 | `--log-level` | `WARNING` | Python logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). `INFO` shows per-stage start/end timing lines |
 | `--profile` | off | Print a stage timing table at the end of the run and write `data/output/{coin_symbol}-timings.csv` (gitignored) |
 | `--no_plots` | off | Skip plot generation and `plt.show()` (for timing runs and non-interactive use) |
+| `--workers` | `min(4, cpu_count)` | Process count for the rolling Normal / Student-t / Historical loop. `--workers 1` is the serial path. Output is byte-identical to serial. The library `rolling_backtest()` still defaults to 1 worker |
+| `--t_warm_start` | off | Seed each window's Student-t fit with the previous window's (df, loc, scale). Default off so outputs stay identical to a cold fit. Forces the serial loop (the warm start is sequential). Slightly changes Student-t VaR/CVaR, breaches and Kupiec p; see [docs/ROADMAP.md](docs/ROADMAP.md) |
+| `--cache_data` | off | If `data/raw/{coin}-{vs}-max.csv` exists, re-fetch only from the last date minus 5 days, merge with de-dup by UTC day (newer rows win), and write back. A Yahoo failure or rate limit falls back to the cache with a warning |
+| `--refresh` | off | Force a full `period=max` download, even with `--cache_data` |
 
 Profile a run (example, conjugate backtest, no plots):
 ```
@@ -143,7 +147,7 @@ Reject flags (`reject_pof_5pct`, `reject_ind_5pct`, `reject_cc_5pct`) are true w
 
 ## Tests
 ```
-python -m pytest                 # all 67 tests (about 15 s)
+python -m pytest                 # all 79 tests (about 25 s)
 python -m pytest -m "not slow"   # skip the 2 slower MCMC tests
 ```
 
@@ -195,7 +199,7 @@ crypto-risk-engine/
 │   └── main.py                                    # Orchestration layer
 │
 ├── docs/                                          # PRD, TRD, app flow, schema, roadmap, design brief
-├── tests/                                         # pytest (67 tests; 2 marked slow)
+├── tests/                                         # pytest (79 tests; 2 marked slow)
 ├── pytest.ini                                     # Registers the `slow` test marker
 ├── environment.yml                                # Conda env (Python 3.11, conda-forge PyMC)
 ├── requirements.txt                               # Minimum pip dependency versions
@@ -205,7 +209,7 @@ crypto-risk-engine/
 
 # Pipeline
 ## `api.py`
-Pulls daily closes from Yahoo Finance (`period=max`, `interval=1d`, `auto_adjust=False`) and saves `data/raw/{coin_symbol}-{vs_currency}-max.csv`.
+Pulls daily closes from Yahoo Finance (`period=max`, `interval=1d`, `auto_adjust=False`) and saves `data/raw/{coin_symbol}-{vs_currency}-max.csv`. With `--cache_data`, loads that file if it exists, re-fetches from the last date minus 5 days, and merges (newer rows win).
 
 ## `returns.py`
 Ingests the raw file, sorts and de-duplicates by date, and writes daily log returns to `data/output/{coin_symbol}-log-returns.csv`.
@@ -223,7 +227,7 @@ Calculates VaR and CVaR from the fitted Normal and Student-t distributions, plus
 Bayesian Student-t on the full sample with PyMC (`--methods bayes`), as described under Methods. Run it alone on an existing returns CSV with `python -m src.bayes --coin_symbol btc` (prints only; `main.py` is what writes the summary CSV).
 
 ## `backtest.py`
-Rolling-window VaR backtest for Historical, Normal and Student-t, then Kupiec POF and Christoffersen independence / conditional coverage tests (`backtest_tests.py`). Each forecast for day `i` is fit on returns `[i - window_size, i)` (no look-ahead).
+Rolling-window VaR backtest for Historical, Normal and Student-t, then Kupiec POF and Christoffersen independence / conditional coverage tests (`backtest_tests.py`). Each forecast for day `i` is fit on returns `[i - window_size, i)` (no look-ahead). The MLE loop can run in parallel (`--workers`); `--t_warm_start` is optional and serial.
 
 ## `rolling_bayes.py`
 Adds a fourth backtest method, `bayes`, when `--methods` includes `bayes`. See Methods for the engines, refit schedule, warm start and cache. Its results get the same Kupiec / Christoffersen tests as the other methods. Further detail is in [docs/TRD.md](docs/TRD.md).

@@ -1,6 +1,6 @@
 # Product Requirements: Crypto Risk Engine
 
-> Educational project, not investment advice. Status reflects the `feat/phase4-rolling-bayes-backtest` branch (Phases 0-3 merged to `main`; Phases 4-6 built on this branch, awaiting review; Phases 7-8 planned). See [ROADMAP.md](ROADMAP.md).
+> Educational project, not investment advice. Status reflects the `feat/phase4-rolling-bayes-backtest` branch (Phases 0-3 merged to `main`; Phases 4-7 built on this branch, awaiting review; Phase 8 planned). See [ROADMAP.md](ROADMAP.md).
 
 ## Who it is for
 - **Primary user:** the repo owner (a quant / risk practitioner) studying downside risk of crypto assets from the command line.
@@ -45,10 +45,11 @@ Crypto daily returns are fat-tailed and volatile. A Normal-distribution VaR tend
 | Rolling Bayesian backtest: `bayes` column in `--backtest` (MCMC Student-t refit every k days with warm start, or conjugate Normal-Inverse-Gamma refit daily), per-refit diagnostics, cached fits, Kupiec / Christoffersen row | Built (Phase 4, awaiting review) | `src/rolling_bayes.py`, `src/backtest.py`, `src/main.py` |
 | README refresh covering all methods, flags, outputs and caveats | **Done on branch** (Phase 5) | `README.md` |
 | Stage timing (`--log-level`, `--profile`, `--no_plots`), progress hook, APP_FLOW diagram labeled with measured times | **Done on branch** (Phase 6) | `src/timing.py`, `src/main.py`, `docs/APP_FLOW.md` |
-| `--ticker` for stocks, EWMA/GARCH, CVaR backtest, faster backtest, CI | **Backlog** (unscheduled) | - |
+| Speedups: parallel rolling MLE loop (`--workers`), optional `--t_warm_start`, `--cache_data` / `--refresh` delta fetch | **Done on branch** (Phase 7) | `src/backtest.py`, `src/distributions.py`, `src/api.py`, `src/main.py` |
+| `--ticker` for stocks, EWMA/GARCH, CVaR backtest, CI | **Backlog** (unscheduled) | - |
 
 ## Success criteria
-- `python -m pytest` passes (67 tests on the current branch, two marked `slow`; `-m "not slow"` skips them).
+- `python -m pytest` passes (79 tests on the current branch, two marked `slow`; `-m "not slow"` skips them).
 - `python -m src.main --coin_symbol btc` completes end to end on live Yahoo data and prints Normal and Student-t VaR / CVaR.
 - `--backtest` writes `data/backtest/{coin}-backtest-results.csv` and `{coin}-backtest-summary.csv`, with no look-ahead (each forecast uses only the prior `window_size` returns).
 - Fitted Student-t df is always >= 2.01; CVaR is never NaN/inf for valid inputs.
