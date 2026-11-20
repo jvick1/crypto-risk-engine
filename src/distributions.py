@@ -3,7 +3,7 @@ Author: Jake Vick
 Purpose: Compute Normal & Student-t distributions for VaR / CVaR modeling
 """
 
-from typing import Tuple
+from typing import Optional, Tuple
 from scipy.stats import norm, t
 from pathlib import Path
 import argparse
@@ -37,7 +37,7 @@ def _valid(df: float, loc: float, scale: float) -> bool:
     return all(np.isfinite([df, loc, scale])) and df > 0 and scale > 0
 
 
-def fit_student_t(returns: pd.Series) -> Tuple[float, float, float]:
+def fit_student_t(returns: pd.Series, start: Optional[Tuple[float, float, float]] = None) -> Tuple[float, float, float]:
     """Fit a Student's t distribution to returns using MLE, with df bounded to df >= DF_FLOOR.
 
     If the unconstrained MLE gives df < DF_FLOOR, the fit is redone with df fixed at
@@ -46,6 +46,8 @@ def fit_student_t(returns: pd.Series) -> Tuple[float, float, float]:
 
     Parameters ----------
     returns: Series of asset returns.
+    start: Optional (df, loc, scale) used as the optimiser starting values (for
+    --t_warm_start). When omitted, the fit is unchanged from the original path.
 
     Output ----------
     df, loc, scale: Degrees of freedom (df), location, and scale. Note scale is NOT the
@@ -60,9 +62,16 @@ def fit_student_t(returns: pd.Series) -> Tuple[float, float, float]:
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
-            df, loc, scale = t.fit(x)
+            if start is None:
+                df, loc, scale = t.fit(x)
+            else:
+                start_df, start_loc, start_scale = start
+                df, loc, scale = t.fit(x, start_df, loc=start_loc, scale=start_scale)
             if _valid(df, loc, scale) and df < DF_FLOOR:
-                df, loc, scale = t.fit(x, f0=DF_FLOOR)
+                if start is None:
+                    df, loc, scale = t.fit(x, f0=DF_FLOOR)
+                else:
+                    df, loc, scale = t.fit(x, f0=DF_FLOOR, loc=start[1], scale=start[2])
                 df = DF_FLOOR
         if _valid(df, loc, scale) and df >= DF_FLOOR:
             return float(df), float(loc), float(scale)

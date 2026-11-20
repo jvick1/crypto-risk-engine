@@ -3,10 +3,15 @@ Author: Jake Vick
 Purpose: Rolling VaR est w/ out of sample backtesting and summary stats
 """
 
-import pandas as pd
-import numpy as np
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
+import multiprocessing as mp
+import os
+import warnings
+
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
 
 from .backtest_tests import christoffersen_cc
@@ -19,10 +24,117 @@ from .risk_metrics import (
 from .rolling_bayes import BT_CHAINS, BT_DRAWS, BT_TUNE
 from .timing import STAGE_BACKTEST_LOOP, STAGE_BACKTEST_TESTS, STAGE_ROLLING_BAYES, get_collector, stage
 
+
+def default_workers() -> int:
+    """CLI default: min(4, cpu_count), at least 1."""
+    return max(1, min(4, os.cpu_count() or 1))
+
+
+def _chunk_ranges(window_size: int, n: int, workers: int) -> list:
+    """Contiguous forecast-index ranges [start, end) covering i = window_size .. n-1."""
+    n_windows = n - window_size
+    if n_windows <= 0:
+        return []
+    n_chunks = min(n_windows, max(workers * 4, workers))
+    bounds = np.linspace(0, n_windows, n_chunks + 1, dtype=int)
+    ranges = []
+    for a, b in zip(bounds[:-1], bounds[1:]):
+        if b > a:
+            ranges.append((int(window_size + a), int(window_size + b)))
+    return ranges
+
+
+def _evaluate_windows_chunk(payload):
+    """Picklable worker: fit a contiguous block of rolling windows.
+
+    payload is a plain tuple so it pickles cleanly under multiprocessing 'spawn'
+    (the Windows start method). No lambdas, no closures.
+    """
+    (returns, start, end, window_size, alpha, methods,
+     rolling_mean, rolling_std) = payload
+    n_out = end - start
+    out = {}
+    if "normal" in methods:
+        out["normal_var"] = np.empty(n_out, dtype=float)
+        out["normal_cvar"] = np.empty(n_out, dtype=float)
+    if "student_t" in methods:
+        out["student_t_var"] = np.empty(n_out, dtype=float)
+        out["student_t_cvar"] = np.empty(n_out, dtype=float)
+    if "historical" in methods:
+        out["historical_var"] = np.empty(n_out, dtype=float)
+        out["historical_cvar"] = np.empty(n_out, dtype=float)
+
+    for k, i in enumerate(range(start, end)):
+        window_returns = returns[i - window_size:i]
+        if "normal" in methods:
+            mu = rolling_mean[i - 1]
+            sigma = rolling_std[i - 1]
+            out["normal_var"][k] = compute_var_normal(mu, sigma, alpha)
+            out["normal_cvar"][k] = compute_cvar_normal(mu, sigma, alpha)
+        if "student_t" in methods:
+            df_t, loc, scale = fit_student_t(pd.Series(window_returns))
+            out["student_t_var"][k] = compute_var_student_t(df_t, loc, scale, alpha)
+            out["student_t_cvar"][k] = compute_cvar_student_t(df_t, loc, scale, alpha)
+        if "historical" in methods:
+            series = pd.Series(window_returns)
+            out["historical_var"][k] = compute_var_historical(series, alpha)
+            out["historical_cvar"][k] = compute_cvar_historical(series, alpha)
+    return start, end, out
+
+
+def _run_serial_loop(returns, window_size, alpha, methods, rolling_mean, rolling_std, results, t_warm_start: bool):
+    """Original one-window-at-a-time loop. --workers 1 always takes this path."""
+    n = len(returns)
+    prev_t = None
+    for i in tqdm(range(window_size, n), desc="Rolling Backtest"):
+        window_returns = returns[i - window_size:i]
+        idx = i - window_size
+        if "normal" in methods:
+            mu = rolling_mean[i - 1]
+            sigma = rolling_std[i - 1]
+            results["normal_var"][idx] = compute_var_normal(mu, sigma, alpha)
+            results["normal_cvar"][idx] = compute_cvar_normal(mu, sigma, alpha)
+        if "student_t" in methods:
+            start = prev_t if t_warm_start else None
+            df_t, loc, scale = fit_student_t(pd.Series(window_returns), start=start)
+            if t_warm_start:
+                prev_t = (df_t, loc, scale)
+            results["student_t_var"][idx] = compute_var_student_t(df_t, loc, scale, alpha)
+            results["student_t_cvar"][idx] = compute_cvar_student_t(df_t, loc, scale, alpha)
+        if "historical" in methods:
+            series = pd.Series(window_returns)
+            results["historical_var"][idx] = compute_var_historical(series, alpha)
+            results["historical_cvar"][idx] = compute_cvar_historical(series, alpha)
+
+
+def _run_parallel_loop(returns, window_size, alpha, methods, rolling_mean, rolling_std, results, workers: int):
+    """Chunked ProcessPoolExecutor with the spawn start method (Windows-safe)."""
+    n = len(returns)
+    ranges = _chunk_ranges(window_size, n, workers)
+    methods_t = tuple(methods)
+    payload_common = (np.asarray(returns, dtype=float), window_size, float(alpha), methods_t,
+                      np.asarray(rolling_mean, dtype=float), np.asarray(rolling_std, dtype=float))
+    ctx = mp.get_context("spawn")
+    futures = []
+    with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as pool:
+        for start, end in ranges:
+            payload = (payload_common[0], start, end, payload_common[1], payload_common[2],
+                       payload_common[3], payload_common[4], payload_common[5])
+            futures.append(pool.submit(_evaluate_windows_chunk, payload))
+        with tqdm(total=n - window_size, desc=f"Rolling Backtest ({workers} workers)") as pbar:
+            for fut in as_completed(futures):
+                start, end, out = fut.result()
+                sl = slice(start - window_size, end - window_size)
+                for key, arr in out.items():
+                    results[key][sl] = arr
+                pbar.update(end - start)
+
+
 def rolling_backtest(df_returns: pd.DataFrame, window_size: int = 252, alpha: float = 0.05, methods: list = ["normal", "student_t", "historical"],
                      bayes_engine: str = "mcmc", refit_every: Optional[int] = None, bayes_draws: int = BT_DRAWS,
                      bayes_tune: int = BT_TUNE, bayes_chains: int = BT_CHAINS, seed: int = 42,
-                     cache_dir: Optional[Path] = None, return_refits: bool = False, on_stage=None):
+                     cache_dir: Optional[Path] = None, return_refits: bool = False, on_stage=None,
+                     workers: int = 1, t_warm_start: bool = False):
     """
     Perform rolling window VaR estimation and out-of-sample backtest.
 
@@ -32,7 +144,11 @@ def rolling_backtest(df_returns: pd.DataFrame, window_size: int = 252, alpha: fl
     (k days between refits; default 21 for mcmc, 1 for conjugate), bayes_draws / bayes_tune /
     bayes_chains (NUTS per refit), seed (refit on day r uses seed + r), cache_dir (cached MCMC
     fits; None = no cache), return_refits (also return the per-refit table),
-    on_stage (optional progress hook; attached to the run collector if it has none)
+    on_stage (optional progress hook; attached to the run collector if it has none),
+    workers (process count for the hist/normal/t loop; 1 = serial path, the default
+    for library calls and tests; the CLI default is min(4, cpu_count)),
+    t_warm_start (seed each Student-t fit with the previous window's (df, loc, scale);
+    default off so outputs stay identical; forces the serial path)
 
     Output -------
     results_df: DataFrame with dates, actual returns, VaR/CVaR for each method, and breach flags
@@ -61,27 +177,23 @@ def rolling_backtest(df_returns: pd.DataFrame, window_size: int = 252, alpha: fl
 
     # Roll through data (Normal / Student-t / Historical). Precompute Normal rolling stats
     # inside this stage so it covers the hist/normal/t work.
+    if workers < 1:
+        raise ValueError(f"workers must be >= 1 (got {workers})")
+    if t_warm_start and workers > 1:
+        warnings.warn(
+            "t_warm_start is sequential (each window seeds the next); using the serial path",
+            RuntimeWarning,
+        )
+        workers = 1
+
     with stage(STAGE_BACKTEST_LOOP):
         returns_series = pd.Series(returns)
-        rolling_mean = returns_series.rolling(window_size).mean()
-        rolling_std = returns_series.rolling(window_size).std()
-        for i in tqdm(range(window_size, n), desc="Rolling Backtest"):
-            window_returns = returns[i - window_size:i]  # Past window for fitting
-
-            if "normal" in methods:
-                mu = rolling_mean.iloc[i - 1]
-                sigma = rolling_std.iloc[i - 1]
-                results["normal_var"][i - window_size] = compute_var_normal(mu, sigma, alpha)
-                results["normal_cvar"][i - window_size] = compute_cvar_normal(mu, sigma, alpha)
-
-            if "student_t" in methods:
-                df_t, loc, scale = fit_student_t(pd.Series(window_returns))
-                results["student_t_var"][i - window_size] = compute_var_student_t(df_t, loc, scale, alpha)
-                results["student_t_cvar"][i - window_size] = compute_cvar_student_t(df_t, loc, scale, alpha)
-
-            if "historical" in methods:
-                results["historical_var"][i - window_size] = compute_var_historical(pd.Series(window_returns), alpha)
-                results["historical_cvar"][i - window_size] = compute_cvar_historical(pd.Series(window_returns), alpha)
+        rolling_mean = returns_series.rolling(window_size).mean().to_numpy()
+        rolling_std = returns_series.rolling(window_size).std().to_numpy()
+        if workers == 1:
+            _run_serial_loop(returns, window_size, alpha, methods, rolling_mean, rolling_std, results, t_warm_start)
+        else:
+            _run_parallel_loop(returns, window_size, alpha, methods, rolling_mean, rolling_std, results, workers)
 
     # Bayes: refit every k days on returns[r - window_size : r] (see src/rolling_bayes.py).
     # Runs after the loop above, so the other methods are computed exactly as before.
@@ -173,6 +285,10 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--no_cache", action="store_true", help="Do not read or write data/cache/rolling-bayes")
     parser.add_argument("--save", action="store_true", help="Write the results / summary / refit CSVs to data/backtest")
+    parser.add_argument("--workers", type=int, default=default_workers(),
+                        help=f"Process count for the rolling hist/normal/t loop (default: min(4, cpu_count)={default_workers()}; 1 = serial)")
+    parser.add_argument("--t_warm_start", action="store_true", default=False,
+                        help="Seed each Student-t fit with the previous window's (df, loc, scale); serial; default off")
 
     args = parser.parse_args()
 
@@ -189,6 +305,8 @@ if __name__ == "__main__":
         bayes_tune=args.bt_tune, bayes_chains=args.bt_chains, seed=args.seed,
         cache_dir=None if args.no_cache else base_dir / "data" / "cache" / "rolling-bayes",
         return_refits=True,
+        workers=args.workers,
+        t_warm_start=args.t_warm_start,
     )
     print(f"Backtest took {time.perf_counter() - t0:.1f} s")
 

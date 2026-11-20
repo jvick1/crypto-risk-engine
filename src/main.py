@@ -14,7 +14,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import argparse
 
-from .api import fetch_historical_data, save_raw_data
+from .api import load_or_fetch_raw, save_raw_data
 from .returns import compute_log_returns
 
 from .distributions import fit_normal, fit_student_t
@@ -32,7 +32,7 @@ from .risk_metrics import (
     compute_var_historical,
     compute_cvar_historical
 )
-from .backtest import rolling_backtest, save_backtest_outputs
+from .backtest import default_workers, rolling_backtest, save_backtest_outputs
 from .rolling_bayes import ENGINES, BT_DRAWS, BT_TUNE, BT_CHAINS
 from .timing import (
     STAGE_BAYES,
@@ -72,7 +72,8 @@ def parse_log_level(value: str) -> str:
         )
     return v
 
-def etl(coin_symbol: str, vs_currency: str, base_dir: Path, on_stage=None):
+def etl(coin_symbol: str, vs_currency: str, base_dir: Path, on_stage=None,
+        cache_data: bool = False, refresh: bool = False):
     """Runs full ETL: Fetch -> save raw -> compute log returns -> save processed"""
     if on_stage is not None and get_collector().on_stage is None:
         get_collector().on_stage = on_stage
@@ -83,7 +84,7 @@ def etl(coin_symbol: str, vs_currency: str, base_dir: Path, on_stage=None):
     with stage(STAGE_DATA_PULL) as st:
         print(f"Fetching raw data for {coin_symbol.upper()}-{vs_currency.upper()} from Yahoo Finance...")
         ticker = f"{coin_symbol.upper()}-{vs_currency.upper()}"
-        df_raw = fetch_historical_data(ticker)
+        df_raw = load_or_fetch_raw(ticker, raw_path, cache_data=cache_data, refresh=refresh)
         save_raw_data(df_raw, raw_path)
         print(f"Raw data for {coin_symbol} downloaded.")
         st.payload = df_raw.head()
@@ -105,7 +106,8 @@ def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd"
          methods: list = None, seed: int = 42, draws: int = 1000, tune: int = 1000, chains: int = 4, hdi_prob: float = 0.94,
          bayes_engine: str = "mcmc", refit_every: int = None, bt_draws: int = BT_DRAWS, bt_tune: int = BT_TUNE,
          bt_chains: int = BT_CHAINS, use_cache: bool = True, on_stage=None, profile: bool = False, no_plots: bool = False,
-         log_level: str = None):
+         log_level: str = None, workers: int = 1, t_warm_start: bool = False,
+         cache_data: bool = False, refresh: bool = False):
     if log_level:
         configure_logging(log_level)
     collector = reset_collector(on_stage=on_stage)
@@ -113,7 +115,8 @@ def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd"
         methods = parse_methods(DEFAULT_METHODS)
     base_dir = Path(__file__).resolve().parents[1]
 
-    returns_path = etl(coin_symbol, vs_currency, base_dir, on_stage=None)
+    returns_path = etl(coin_symbol, vs_currency, base_dir, on_stage=None,
+                       cache_data=cache_data, refresh=refresh)
 
     df_returns = pd.read_csv(returns_path)
     returns = df_returns["return"]
@@ -186,6 +189,8 @@ def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd"
                 cache_dir=base_dir / "data" / "cache" / "rolling-bayes" if use_cache else None,
                 return_refits=True,
                 on_stage=None,
+                workers=workers,
+                t_warm_start=t_warm_start,
             )
             st.payload = results_df.head()
 
@@ -227,6 +232,10 @@ def main(alpha: float = 0.05, coin_symbol: str = "btc", vs_currency: str = "usd"
             "bt_chains": bt_chains,
             "use_cache": use_cache,
             "no_plots": no_plots,
+            "workers": workers,
+            "t_warm_start": t_warm_start,
+            "cache_data": cache_data,
+            "refresh": refresh,
         }
         timings_path = base_dir / "data" / "output" / f"{coin_symbol}-timings.csv"
         collector.to_csv(timings_path, run_id, settings)
@@ -343,6 +352,30 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Skip plot generation and plt.show() (for timing runs and non-interactive use)",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=default_workers(),
+        help=f"Process count for the rolling hist/normal/t loop (default: min(4, cpu_count)={default_workers()}; use 1 for the serial path)",
+    )
+    parser.add_argument(
+        "--t_warm_start",
+        action="store_true",
+        default=False,
+        help="Seed each Student-t fit with the previous window's (df, loc, scale). Default off (outputs stay identical). Forces the serial loop",
+    )
+    parser.add_argument(
+        "--cache_data",
+        action="store_true",
+        default=False,
+        help="If data/raw/{coin}-{vs}-max.csv exists, re-fetch only from last date minus 5 days and merge (newer rows win)",
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        default=False,
+        help="Force a full period=max download, even with --cache_data",
+    )
     return parser
 
 if __name__ == "__main__":
@@ -354,4 +387,5 @@ if __name__ == "__main__":
          methods=args.methods, seed=args.seed, draws=args.draws, tune=args.tune, chains=args.chains, hdi_prob=args.hdi_prob,
          bayes_engine=args.bayes_engine, refit_every=args.refit_every, bt_draws=args.bt_draws, bt_tune=args.bt_tune,
          bt_chains=args.bt_chains, use_cache=not args.no_cache, profile=args.profile, no_plots=args.no_plots,
-         log_level=None)
+         log_level=None, workers=args.workers, t_warm_start=args.t_warm_start,
+         cache_data=args.cache_data, refresh=args.refresh)
