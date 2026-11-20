@@ -13,6 +13,15 @@ The pipeline is organized to clearly separate raw data, log returns, distributio
 - [Design brief](docs/DESIGN_BRIEF.md): brand, look and voice (draft)
 
 # Install
+Needs Python 3.11 or newer.
+
+**Anaconda (recommended on Windows):** use a separate env, not base. Installing PyMC into base can upgrade NumPy past what Anaconda's own packages were built for.
+```
+conda env create -f environment.yml
+conda activate crypto-risk
+```
+
+**pip:**
 ```
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
@@ -92,7 +101,7 @@ crypto-risk-engine/
 ├── tests/                                         # pytest sanity tests
 ├── pytest.ini                                     # registers the `slow` test marker
 ├── .gitignore
-├── requirements.txt                               # Pinned dependencies
+├── requirements.txt                               # Minimum dependency versions
 └── README.md                                      # Project documentation
 ```
 # Pipeline

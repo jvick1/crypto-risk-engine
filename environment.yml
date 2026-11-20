@@ -1,0 +1,17 @@
+# conda env create -f environment.yml && conda activate crypto-risk
+# conda-forge's PyMC brings a C compiler for PyTensor, so sampling is fast on Windows too.
+name: crypto-risk
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pymc>=5.10
+  - arviz>=0.17
+  - numpy>=1.26
+  - scipy>=1.11
+  - pandas>=2.1
+  - matplotlib>=3.8
+  - seaborn>=0.13
+  - tqdm>=4.66
+  - pytest>=8
+  - yfinance>=0.2.40
