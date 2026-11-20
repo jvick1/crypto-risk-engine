@@ -21,21 +21,21 @@ A flat Python package `src/`, run as `python -m src.main`. Each module also has 
 
 Known quirks (documented, not yet changed): the full-sample Normal fit uses ddof=0 while the rolling Normal uses ddof=1; `main.py` labels the risk-metric header `-USD` regardless of `--vs_currency`; the full-sample Historical VaR/CVaR is printed by `main.py` only with `--methods ...,hist` (default `normal,t` keeps the old output); `--backtest` always runs Normal, Student-t and Historical; `--methods` only adds the rolling Bayes backtest when it lists `bayes`.
 
-## Stack (pinned in `requirements.txt`)
-Python 3 with:
+## Stack (minimum versions in `requirements.txt` and `environment.yml`)
+Python 3.11 or newer. Tested on Python 3.11 (PyMC 5.28 / ArviZ 0.23) and 3.12 (PyMC 6.3 / ArviZ 1.3). Anaconda users should create the separate env in `environment.yml` rather than installing into base.
 
-| Package | Version | Used for |
+| Package | Minimum | Used for |
 |---|---|---|
-| numpy | 2.5.4 | arrays, log returns, percentiles |
-| pandas | 3.1.0 | data frames, CSV I/O, rolling stats |
-| scipy | 1.18.1 | `norm`, `t`, `t.fit`, `chi2`, `probplot` |
-| yfinance | 1.7.0 | Yahoo Finance download |
-| matplotlib | 3.11.2 | plots |
-| seaborn | 0.13.2 | histogram |
-| tqdm | 4.70.1 | backtest progress bar |
-| pytest | 9.1.1 | tests |
-| pymc | 6.3.2 | Bayesian Student-t (`src/bayes.py`, `src/rolling_bayes.py` MCMC engine; imported only with `--methods bayes`) |
-| arviz | 1.3.0 | R-hat and bulk / tail ESS (`src/bayes.diagnostics`) |
+| numpy | 1.26 | arrays, log returns, percentiles |
+| pandas | 2.1 | data frames, CSV I/O, rolling stats |
+| scipy | 1.11 | `norm`, `t`, `t.fit`, `chi2`, `probplot` |
+| yfinance | 0.2.40 | Yahoo Finance download |
+| matplotlib | 3.8 | plots |
+| seaborn | 0.13 | histogram |
+| tqdm | 4.66 | backtest progress bar |
+| pytest | 8 | tests |
+| pymc | 5.10 | Bayesian Student-t (`src/bayes.py`, `src/rolling_bayes.py` MCMC engine; imported only with `--methods bayes`) |
+| arviz | 0.17 | R-hat and bulk / tail ESS (`src/bayes.diagnostics`) |
 
 ## Related repos
 | Repo | Relationship |
@@ -55,7 +55,7 @@ No runtime dependency on any other repo.
 | `--alpha` | float, `0.05` | Tail probability (0.05 = 95% VaR), not a confidence level |
 | `--backtest` | flag, off | Run the rolling backtest, save results + summary CSVs, show the rolling VaR plot |
 | `--window_size` | int, `252` | Rolling window length in observations (crypto trades daily, so about 8 months) |
-| `--methods` | comma list, `normal,t` | Full-sample methods to print: `normal`, `t`, `hist`, `bayes`. Bayes is opt-in (MCMC). Does not affect `--backtest` |
+| `--methods` | comma list, `normal,t` | Full-sample methods to print: `normal`, `t`, `hist`, `bayes`. Bayes is opt-in (MCMC). `--backtest` always runs Normal, Student-t and Historical, and adds the rolling Bayes backtest when `bayes` is listed |
 | `--seed` | int, `42` | Bayes: sampler seed (same seed + same input = same posterior) |
 | `--draws` | int, `1000` | Bayes: posterior draws per chain |
 | `--tune` | int, `1000` | Bayes: warm-up steps per chain (discarded) |

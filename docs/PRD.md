@@ -1,6 +1,6 @@
 # Product Requirements: Crypto Risk Engine
 
-> Educational project, not investment advice. Status reflects the `feat/phase4-rolling-bayes-backtest` branch (Phases 0-3 merged to `main`; Phase 4 built on this branch, awaiting review; Phases 5-8 planned). See [ROADMAP.md](ROADMAP.md).
+> Educational project, not investment advice. Status reflects the `feat/phase4-rolling-bayes-backtest` branch (Phases 0-3 merged to `main`; Phases 4-5 built on this branch, awaiting review; Phases 6-8 planned). See [ROADMAP.md](ROADMAP.md).
 
 ## Who it is for
 - **Primary user:** the repo owner (a quant / risk practitioner) studying downside risk of crypto assets from the command line.
@@ -43,7 +43,7 @@ Crypto daily returns are fat-tailed and volatile. A Normal-distribution VaR tend
 | Bayesian Student-t (PyMC) VaR / CVaR with credible intervals and R-hat / ESS diagnostics, `--methods bayes` (opt-in; full sample) | Built (Phase 3, merged) | `src/bayes.py`, `src/main.py` |
 | `--methods` selection of full-sample methods (`normal,t,hist,bayes`; Historical now printable from `main`) | Built (Phase 3, merged) | `src/main.py` |
 | Rolling Bayesian backtest: `bayes` column in `--backtest` (MCMC Student-t refit every k days with warm start, or conjugate Normal-Inverse-Gamma refit daily), per-refit diagnostics, cached fits, Kupiec / Christoffersen row | Built (Phase 4, awaiting review) | `src/rolling_bayes.py`, `src/backtest.py`, `src/main.py` |
-| README refresh covering all methods | **Planned** (Phase 5) | - |
+| README refresh covering all methods, flags, outputs and caveats | **Done on branch** (Phase 5) | `README.md` |
 | `--ticker` for stocks, EWMA/GARCH, CVaR backtest, faster backtest, CI | **Backlog** (unscheduled) | - |
 
 ## Success criteria
