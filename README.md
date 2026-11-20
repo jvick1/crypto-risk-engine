@@ -94,6 +94,15 @@ These are all of the flags from `python -m src.main --help`. There is no `--verb
 | `--bt_tune` | `500` | Backtest Bayes (`mcmc`): tuning steps per chain per refit |
 | `--bt_chains` | `2` | Backtest Bayes (`mcmc`): chains per refit, run sequentially |
 | `--no_cache` | off | Backtest Bayes (`mcmc`): do not read or write cached fits in `data/cache/rolling-bayes/` |
+| `--log-level` | `WARNING` | Python logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). `INFO` shows per-stage start/end timing lines |
+| `--profile` | off | Print a stage timing table at the end of the run and write `data/output/{coin_symbol}-timings.csv` (gitignored) |
+| `--no_plots` | off | Skip plot generation and `plt.show()` (for timing runs and non-interactive use) |
+
+Profile a run (example, conjugate backtest, no plots):
+```
+python -m src.main --coin_symbol btc --backtest --methods normal,t,hist,bayes --bayes_engine conjugate --profile --no_plots
+```
+Measured stage times and a ranked bottleneck table are in [docs/APP_FLOW.md](docs/APP_FLOW.md).
 
 ## Methods
 
@@ -107,7 +116,7 @@ These are all of the flags from `python -m src.main --help`. There is no `--verb
 
 ## Outputs
 
-VaR/CVaR in every file are log-return quantiles at `--alpha` (negative = loss). Plots are shown with `plt.show()` and **are not saved to disk** (the README images are hosted on GitHub). Column layouts are in [docs/SCHEMA.md](docs/SCHEMA.md).
+VaR/CVaR in every file are log-return quantiles at `--alpha` (negative = loss). Plot functions return matplotlib Figures; `src.main` shows them with `plt.show()` unless `--no_plots` is set. Plots are **not saved to disk** (the README images are hosted on GitHub). Column layouts are in [docs/SCHEMA.md](docs/SCHEMA.md).
 
 | Path | Written when | Committed in the repo? |
 |---|---|---|
@@ -118,6 +127,7 @@ VaR/CVaR in every file are log-return quantiles at `--alpha` (negative = loss). 
 | `data/backtest/{coin_symbol}-backtest-summary.csv` | `--backtest` | No (generated only) |
 | `data/backtest/{coin_symbol}-bayes-refits.csv` | `--backtest` with `bayes` in `--methods` | No (generated only) |
 | `data/cache/rolling-bayes/{sha256}.npz` | Rolling MCMC refits, unless `--no_cache` | No; the `data/cache/` directory is gitignored |
+| `data/output/{coin_symbol}-timings.csv` | `--profile` | No; gitignored (`data/output/*-timings.csv`). One row per stage: `run_id`, `stage`, `parent`, `seconds`, plus the run settings |
 
 `--backtest` always writes `bayes_var` / `bayes_cvar` / `bayes_breach` into the results CSV, a `bayes` row into the summary CSV, and the refit log, when `bayes` is listed. Without `bayes`, the first 11 results columns stay the same.
 
@@ -133,7 +143,7 @@ Reject flags (`reject_pof_5pct`, `reject_ind_5pct`, `reject_cc_5pct`) are true w
 
 ## Tests
 ```
-python -m pytest                 # all 60 tests (about 15 s)
+python -m pytest                 # all 67 tests (about 15 s)
 python -m pytest -m "not slow"   # skip the 2 slower MCMC tests
 ```
 
@@ -181,10 +191,11 @@ crypto-risk-engine/
 │   ├── backtest.py                                # Rolling VaR backtest
 │   ├── rolling_bayes.py                           # Rolling Bayesian VaR (MCMC / conjugate), refit schedule, cache
 │   ├── backtest_tests.py                          # Kupiec / Christoffersen tests
+│   ├── timing.py                                  # Nestable stage timer, --profile CSV, on_stage hook
 │   └── main.py                                    # Orchestration layer
 │
 ├── docs/                                          # PRD, TRD, app flow, schema, roadmap, design brief
-├── tests/                                         # pytest (60 tests; 2 marked slow)
+├── tests/                                         # pytest (67 tests; 2 marked slow)
 ├── pytest.ini                                     # Registers the `slow` test marker
 ├── environment.yml                                # Conda env (Python 3.11, conda-forge PyMC)
 ├── requirements.txt                               # Minimum pip dependency versions

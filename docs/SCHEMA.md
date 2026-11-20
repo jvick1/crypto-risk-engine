@@ -105,15 +105,26 @@ Written by `main.py` with `--methods ...,bayes` (added in Phase 3; `src.bayes.su
 
 Committed example: `btc`, from the live 2026-11-12 run (alpha 0.05, `n_obs` 4,439, 4 chains x 1,000 draws, seed 42). It is newer than the committed `btc-log-returns.csv` (which ends 2026-02-28), so rerunning on the committed CSV with `python -m src.bayes` gives slightly different numbers.
 
+### 6. Timing summary: `data/output/{coin}-timings.csv`
+Written by `main.py` with `--profile` (`src/timing.py`). Gitignored (`data/output/*-timings.csv`). One row per pipeline stage, in start order (a parent appears before its children). `parent` is empty for top-level stages. Nested stages (`backtest loop`, `rolling bayes`, `backtest tests`) have parent `backtest`. Plot stages are omitted when `--no_plots` is set.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `run_id` | str | UTC timestamp plus 8 hex characters, e.g. `20261120T224639Z-f16ad198` |
+| `stage` | str | Stage name, matching the node labels in [APP_FLOW.md](APP_FLOW.md): `data pull`, `returns`, `fits`, `risk metrics`, `bayes`, `plots`, `backtest`, `backtest loop`, `rolling bayes`, `backtest tests`, `rolling var plot` |
+| `parent` | str | Parent stage name, or empty for top-level stages |
+| `seconds` | float | Wall-clock time from `time.perf_counter` |
+| `coin_symbol`, `vs_currency`, `alpha`, `backtest`, `window_size`, `methods`, `seed`, `draws`, `tune`, `chains`, `hdi_prob`, `bayes_engine`, `refit_every`, `bt_draws`, `bt_tune`, `bt_chains`, `use_cache`, `no_plots` | mixed | Run settings, repeated on every row (`methods` is the comma-separated `--methods` string; `refit_every` is empty when the default was left unset) |
+
 ## Plot outputs
-Figures are shown interactively with `plt.show()` at the end of `main`; **they are not saved to disk** (the README images are hosted on GitHub).
+Plot functions in `visualization.py` return matplotlib Figures; `main` shows them with `plt.show()` at the end of the run unless `--no_plots` is set (which skips generation and show). **They are not saved to disk** (the README images are hosted on GitHub).
 
 | Figure | Function | When |
 |---|---|---|
-| Return histogram with Normal and Student-t PDFs and VaR lines | `plot_histogram_with_fits` | Every run |
-| QQ plots vs Normal and vs Student-t | `plot_qq_plots` | Every run |
-| Left-tail density, log scale (x from -0.30 to 0) | `plot_tail_comparison` | Every run |
-| Rolling VaR per method with breach markers and breach rate in legend | `plot_rolling_var` | `--backtest` only |
+| Return histogram with Normal and Student-t PDFs and VaR lines | `plot_histogram_with_fits` | Every run except `--no_plots` |
+| QQ plots vs Normal and vs Student-t | `plot_qq_plots` | Every run except `--no_plots` |
+| Left-tail density, log scale (x from -0.30 to 0) | `plot_tail_comparison` | Every run except `--no_plots` |
+| Rolling VaR per method with breach markers and breach rate in legend | `plot_rolling_var` | `--backtest` only, except `--no_plots` |
 
 ## Config
 There is no config file or environment variable. Configuration is the CLI flags (see [TRD.md](TRD.md#interfaces)) plus these code constants:
