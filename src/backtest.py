@@ -17,11 +17,12 @@ from .risk_metrics import (
     compute_var_historical, compute_cvar_historical
 )
 from .rolling_bayes import BT_CHAINS, BT_DRAWS, BT_TUNE
+from .timing import STAGE_BACKTEST_LOOP, STAGE_BACKTEST_TESTS, STAGE_ROLLING_BAYES, get_collector, stage
 
 def rolling_backtest(df_returns: pd.DataFrame, window_size: int = 252, alpha: float = 0.05, methods: list = ["normal", "student_t", "historical"],
                      bayes_engine: str = "mcmc", refit_every: Optional[int] = None, bayes_draws: int = BT_DRAWS,
                      bayes_tune: int = BT_TUNE, bayes_chains: int = BT_CHAINS, seed: int = 42,
-                     cache_dir: Optional[Path] = None, return_refits: bool = False):
+                     cache_dir: Optional[Path] = None, return_refits: bool = False, on_stage=None):
     """
     Perform rolling window VaR estimation and out-of-sample backtest.
 
@@ -30,7 +31,8 @@ def rolling_backtest(df_returns: pd.DataFrame, window_size: int = 252, alpha: fl
     bayes only (see src/rolling_bayes.py): bayes_engine ("mcmc" or "conjugate"), refit_every
     (k days between refits; default 21 for mcmc, 1 for conjugate), bayes_draws / bayes_tune /
     bayes_chains (NUTS per refit), seed (refit on day r uses seed + r), cache_dir (cached MCMC
-    fits; None = no cache), return_refits (also return the per-refit table)
+    fits; None = no cache), return_refits (also return the per-refit table),
+    on_stage (optional progress hook; attached to the run collector if it has none)
 
     Output -------
     results_df: DataFrame with dates, actual returns, VaR/CVaR for each method, and breach flags
@@ -38,16 +40,14 @@ def rolling_backtest(df_returns: pd.DataFrame, window_size: int = 252, alpha: fl
                 independence / conditional coverage LR stats, p-values, reject at 5%
     refits_df (only if return_refits): one row per Bayes refit (None if bayes not run)
     """
+    if on_stage is not None and get_collector().on_stage is None:
+        get_collector().on_stage = on_stage
+
     # Ensure sorted by date ascending
     df_returns = df_returns.sort_values("date").reset_index(drop=True)
     returns = df_returns["return"].values
     dates = pd.to_datetime(df_returns["date"])
     
-    # Precompute rolling statistics for Normal model
-    returns_series = pd.Series(returns)
-    rolling_mean = returns_series.rolling(window_size).mean()
-    rolling_std = returns_series.rolling(window_size).std()
-
     # Initialize results
     n = len(returns)
     results = {
@@ -59,42 +59,48 @@ def rolling_backtest(df_returns: pd.DataFrame, window_size: int = 252, alpha: fl
         results[f"{method}_cvar"] = np.full(n - window_size, np.nan)
         results[f"{method}_breach"] = np.full(n - window_size, False)
 
-    # Roll through data
-    for i in tqdm(range(window_size, n), desc="Rolling Backtest"):     
-        window_returns = returns[i - window_size:i]  # Past window for fitting
+    # Roll through data (Normal / Student-t / Historical). Precompute Normal rolling stats
+    # inside this stage so it covers the hist/normal/t work.
+    with stage(STAGE_BACKTEST_LOOP):
+        returns_series = pd.Series(returns)
+        rolling_mean = returns_series.rolling(window_size).mean()
+        rolling_std = returns_series.rolling(window_size).std()
+        for i in tqdm(range(window_size, n), desc="Rolling Backtest"):
+            window_returns = returns[i - window_size:i]  # Past window for fitting
 
-        if "normal" in methods:
-            mu = rolling_mean.iloc[i - 1]
-            sigma = rolling_std.iloc[i - 1]
-            results["normal_var"][i - window_size] = compute_var_normal(mu, sigma, alpha)
-            results["normal_cvar"][i - window_size] = compute_cvar_normal(mu, sigma, alpha)
+            if "normal" in methods:
+                mu = rolling_mean.iloc[i - 1]
+                sigma = rolling_std.iloc[i - 1]
+                results["normal_var"][i - window_size] = compute_var_normal(mu, sigma, alpha)
+                results["normal_cvar"][i - window_size] = compute_cvar_normal(mu, sigma, alpha)
 
-        if "student_t" in methods:
-            df_t, loc, scale = fit_student_t(pd.Series(window_returns))
-            results["student_t_var"][i - window_size] = compute_var_student_t(df_t, loc, scale, alpha)
-            results["student_t_cvar"][i - window_size] = compute_cvar_student_t(df_t, loc, scale, alpha)
+            if "student_t" in methods:
+                df_t, loc, scale = fit_student_t(pd.Series(window_returns))
+                results["student_t_var"][i - window_size] = compute_var_student_t(df_t, loc, scale, alpha)
+                results["student_t_cvar"][i - window_size] = compute_cvar_student_t(df_t, loc, scale, alpha)
 
-        if "historical" in methods:
-            results["historical_var"][i - window_size] = compute_var_historical(pd.Series(window_returns), alpha)
-            results["historical_cvar"][i - window_size] = compute_cvar_historical(pd.Series(window_returns), alpha)
+            if "historical" in methods:
+                results["historical_var"][i - window_size] = compute_var_historical(pd.Series(window_returns), alpha)
+                results["historical_cvar"][i - window_size] = compute_cvar_historical(pd.Series(window_returns), alpha)
 
     # Bayes: refit every k days on returns[r - window_size : r] (see src/rolling_bayes.py).
     # Runs after the loop above, so the other methods are computed exactly as before.
     refits_df = None
     if "bayes" in methods:
         from .rolling_bayes import rolling_bayes, refit_report
-        var_b, cvar_b, refits_df = rolling_bayes(
-            returns, window_size=window_size, alpha=alpha, engine=bayes_engine,
-            refit_every=refit_every, draws=bayes_draws, tune=bayes_tune, chains=bayes_chains,
-            seed=seed, cache_dir=cache_dir,
-        )
-        results["bayes_var"] = var_b
-        results["bayes_cvar"] = cvar_b
-        date_str = dates.dt.strftime("%Y-%m-%d").to_numpy()
-        refits_df.insert(2, "refit_date", date_str[refits_df["refit_pos"].to_numpy()])
-        refits_df.insert(3, "fit_start_date", date_str[refits_df["fit_start_pos"].to_numpy()])
-        refits_df.insert(4, "fit_end_date", date_str[refits_df["fit_end_pos"].to_numpy()])
-        print(refit_report(refits_df))
+        with stage(STAGE_ROLLING_BAYES):
+            var_b, cvar_b, refits_df = rolling_bayes(
+                returns, window_size=window_size, alpha=alpha, engine=bayes_engine,
+                refit_every=refit_every, draws=bayes_draws, tune=bayes_tune, chains=bayes_chains,
+                seed=seed, cache_dir=cache_dir,
+            )
+            results["bayes_var"] = var_b
+            results["bayes_cvar"] = cvar_b
+            date_str = dates.dt.strftime("%Y-%m-%d").to_numpy()
+            refits_df.insert(2, "refit_date", date_str[refits_df["refit_pos"].to_numpy()])
+            refits_df.insert(3, "fit_start_date", date_str[refits_df["fit_start_pos"].to_numpy()])
+            refits_df.insert(4, "fit_end_date", date_str[refits_df["fit_end_pos"].to_numpy()])
+            print(refit_report(refits_df))
 
     results_df = pd.DataFrame(results)
 
@@ -104,9 +110,10 @@ def rolling_backtest(df_returns: pd.DataFrame, window_size: int = 252, alpha: fl
 
     # Summary: breach rates plus Kupiec / Christoffersen tests.
     # Note: rolling windows overlap, so the tests' independence assumption is approximate.
-    summary = {m: christoffersen_cc(results_df[f"{m}_breach"].values, alpha) for m in methods}
-    summary_df = pd.DataFrame(summary).T
-    summary_df.index.name = "method"
+    with stage(STAGE_BACKTEST_TESTS):
+        summary = {m: christoffersen_cc(results_df[f"{m}_breach"].values, alpha) for m in methods}
+        summary_df = pd.DataFrame(summary).T
+        summary_df.index.name = "method"
 
     if return_refits:
         return results_df, summary_df, refits_df
